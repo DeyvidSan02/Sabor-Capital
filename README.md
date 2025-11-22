@@ -54,12 +54,7 @@ npm run dev
 ✅ Sistema de diseño (colores gastronómicos)  
 ✅ Navegación con sidebar  
 ✅ Rutas y páginas placeholder  
-✅ Componentes base reutilizables  
-
-⏳ Pendiente: Implementación de UI basada en wireframes de Stitch  
-⏳ Pendiente: Integración con Lovable Cloud  
-⏳ Pendiente: Integración con Google Places API  
-⏳ Pendiente: Integración con IA para recomendaciones  
+✅ Componentes base reutilizables 
 
 ## Notas de diseño
 
