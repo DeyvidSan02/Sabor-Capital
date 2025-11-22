@@ -1,0 +1,25 @@
+{
+  "name": "sabor-capital",
+  "version": "1.0.0",
+  "description": "Proyecto de grado Politécnico Grancolombiano - Recomendación de Restaurantes mediante el uso de API'S e IA\r Plataforma web gastronómica inteligente para Bogotá que combina la potencia de Google Places API con recomendaciones personalizadas de IA para descubrir los mejores restaurantes de la capital.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DeyvidSan02/Sabor-Capital.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DeyvidSan02/Sabor-Capital/issues"
+  },
+  "homepage": "https://github.com/DeyvidSan02/Sabor-Capital#readme",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
