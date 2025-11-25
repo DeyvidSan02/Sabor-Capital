@@ -1,14 +1,52 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
-import { Search, SlidersHorizontal, Plus, Minus, Navigation } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, Minus, Navigation, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { useRestaurants, getPhotoUrl, RestaurantFilters } from "@/hooks/useRestaurants";
+import { QuickRecommendationModal } from "@/components/QuickRecommendationModal";
+import { useLocalidades, useBarriosPorLocalidad } from "@/hooks/useBarriosBogota";
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyBer6JXdqunENnx3lqiLAszzqqREO8nGY0";
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+const CUISINE_TYPES = [
+  "Colombian",
+  "Asian",
+  "Italian",
+  "Steakhouse",
+  "Mexican",
+  "Japanese",
+  "Chinese",
+  "Mediterranean",
+  "French",
+  "American",
+  "Peruvian",
+  "Spanish",
+  "Thai",
+  "Indian",
+  "Vietnamese",
+  "Korean",
+  "Brazilian",
+];
+
+const getCuisineDisplay = (restaurant: any): string => {
+  const cuisine = restaurant.cuisine || restaurant.types?.[0]?.replace(/_/g, " ") || "";
+  
+  // Check if cuisine matches any predefined type (case insensitive)
+  const matchesPredefined = CUISINE_TYPES.some(
+    type => cuisine.toLowerCase().includes(type.toLowerCase())
+  );
+  
+  if (matchesPredefined || !cuisine) {
+    return cuisine || "Restaurante";
+  }
+  
+  return "Otro";
+};
 
 const mapContainerStyle = {
   width: '100%',
@@ -37,71 +75,127 @@ const userLocationIcon = {
   `)}`
 };
 
-const mockRestaurantes = [
-  {
-    id: 1,
-    nombre: "La Cocina de Sofía",
-    tipo: "Comida Colombiana",
-    calificacion: 4.5,
-    precio: "$$$",
-    imagen: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400",
-    lat: 4.6097,
-    lng: -74.0817,
-  },
-  {
-    id: 2,
-    nombre: "Sushi Dreams",
-    tipo: "Japonesa",
-    calificacion: 4.8,
-    precio: "$$$$",
-    imagen: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=400",
-    lat: 4.6534,
-    lng: -74.0836,
-  },
-  {
-    id: 3,
-    nombre: "Pizza Roma",
-    tipo: "Italiana",
-    calificacion: 4.3,
-    precio: "$$",
-    imagen: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400",
-    lat: 4.6762,
-    lng: -74.0481,
-  },
-  {
-    id: 4,
-    nombre: "Tacos El Güero",
-    tipo: "Mexicana",
-    calificacion: 4.6,
-    precio: "$$",
-    imagen: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=400",
-    lat: 4.6398,
-    lng: -74.0892,
-  },
-  {
-    id: 5,
-    nombre: "Le Petit Bistro",
-    tipo: "Francesa",
-    calificacion: 4.7,
-    precio: "$$$$",
-    imagen: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400",
-    lat: 4.6482,
-    lng: -74.0632,
-  },
-];
+// Mapeo de barrios oficiales a zonas comerciales en la BD
+const neighborhoodMapping: { [key: string]: string[] } = {
+  // Chapinero
+  'Chicó Lago': ['Parque 93', 'La Cabrera', 'Rincón del Chico'],
+  'Chicó Norte': ['Parque 93', 'La Cabrera', 'Rincón del Chico', 'Quinta Camacho'],
+  'Chicó Norte II': ['Parque 93', 'Quinta Camacho'],
+  'El Retiro': ['Parque 93', 'Rincón del Chico'],
+  'Chapinero': ['Chapinero', 'Chapinero Central'],
+  'Chapinero Norte': ['Chapinero', 'Chapinero Central', 'Quinta Camacho'],
+  'Chapinero Central': ['Chapinero Central', 'Chapinero'],
+  'Pardo Rubio': ['Chapinero'],
+  
+  // Usaquén
+  'Usaquén': ['Usaquén'],
+  'Santa Bárbara': ['Usaquén', 'Santa Bárbara'],
+  'Country Club': ['Usaquén'],
+  'Los Cedros': ['Usaquén'],
+  'San Patricio': ['Usaquén'],
+  
+  // La Candelaria
+  'La Candelaria': ['La Candelaria', 'La Concordia', 'Centro'],
+  
+  // Teusaquillo
+  'Teusaquillo': ['Teusaquillo'],
+  'Galerías': ['Teusaquillo'],
+  'Parque Simón Bolívar': ['Teusaquillo'],
+  
+  // Suba
+  'Suba': ['Suba'],
+  'Suba Centro': ['Suba'],
+  
+  // Engativá
+  'Engativá': ['Engativá'],
+  'Álamos': ['Engativá'],
+  
+  // Fontibón
+  'Fontibón': ['Fontibón'],
+  'Modelia': ['Fontibón'],
+  'Aeropuerto El Dorado': ['Fontibón'],
+  
+  // Kennedy
+  'Kennedy': ['Kennedy'],
+  'Kennedy Central': ['Kennedy'],
+  
+  // Puente Aranda
+  'Puente Aranda': ['Puente Aranda'],
+  
+  // Antonio Nariño
+  'Antonio Nariño': ['Antonio Nariño'],
+  
+  // Rafael Uribe Uribe
+  'Rafael Uribe Uribe': ['Rafael Uribe Uribe'],
+  
+  // Tunjuelito
+  'Tunjuelito': ['Tunjuelito'],
+  
+  // Bosa
+  'Bosa': ['Bosa'],
+  
+  // Ciudad Bolívar
+  'Ciudad Bolívar': ['Ciudad Bolívar'],
+  
+  // Usme
+  'Usme': ['Usme'],
+  
+  // San Cristóbal
+  'San Cristóbal': ['San Cristóbal'],
+  
+  // Santa Fe
+  'Santa Fe': ['Santa Fe', 'La Candelaria'],
+  
+  // Los Mártires
+  'Los Mártires': ['Los Mártires', 'Centro'],
+  
+  // Barrios Unidos
+  'Barrios Unidos': ['Barrios Unidos'],
+  
+  // Rosales
+  'Rosales': ['Rosales', 'Zona G'],
+  
+  // Zona G
+  'Zona G': ['Zona G', 'Rosales'],
+  
+  // Zona T
+  'Zona T': ['Zona T', 'Zona Rosa'],
+  'Zona Rosa': ['Zona Rosa', 'Zona T'],
+};
 
 export default function Mapa() {
   const navigate = useNavigate();
+  const [filters, setFilters] = useState<RestaurantFilters>({
+    cuisine: [],
+    priceLevel: [],
+    neighborhood: [],
+    minRating: undefined,
+    openNow: undefined,
+  });
+  const { data: restaurants = [], isLoading } = useRestaurants(undefined, filters);
   const [mapSearchQuery, setMapSearchQuery] = useState("");
-  const [selectedRestaurant, setSelectedRestaurant] = useState<typeof mockRestaurantes[0] | null>(null);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<typeof restaurants[0] | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showRecommendationModal, setShowRecommendationModal] = useState(false);
+  const [selectedLocalidadId, setSelectedLocalidadId] = useState<string | null>(null);
+  
+  const { data: localidades = [], isLoading: loadingLocalidades } = useLocalidades();
+  const { data: barrios = [], isLoading: loadingBarrios } = useBarriosPorLocalidad(selectedLocalidadId);
 
-  const filteredRestaurants = mockRestaurantes.filter((restaurant) =>
-    restaurant.nombre.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
-    restaurant.tipo.toLowerCase().includes(mapSearchQuery.toLowerCase())
+  const filteredRestaurants = restaurants.filter((restaurant) =>
+    restaurant.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
+    (restaurant.cuisine && restaurant.cuisine.toLowerCase().includes(mapSearchQuery.toLowerCase()))
   );
+
+  const activeFiltersCount = [
+    filters.cuisine.length > 0,
+    filters.priceLevel.length > 0,
+    filters.neighborhood.length > 0,
+    filters.minRating !== undefined,
+    filters.openNow !== undefined,
+  ].filter(Boolean).length;
 
   const handleLocate = () => {
     if (navigator.geolocation && map) {
@@ -132,10 +226,10 @@ export default function Mapa() {
     }
   };
 
-  const handleRestaurantClick = (restaurant: typeof mockRestaurantes[0]) => {
+  const handleRestaurantClick = (restaurant: typeof restaurants[0]) => {
     setSelectedRestaurant(restaurant);
-    if (map) {
-      map.panTo({ lat: restaurant.lat, lng: restaurant.lng });
+    if (map && restaurant.location?.lat && restaurant.location?.lng) {
+      map.panTo({ lat: restaurant.location.lat, lng: restaurant.location.lng });
       map.setZoom(16);
     }
   };
@@ -150,95 +244,192 @@ export default function Mapa() {
       <div className="w-96 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border space-y-3">
           <div className="flex gap-2">
-            <Select>
+            <Select onValueChange={(value) => setFilters(prev => ({ ...prev, cuisine: [value] }))}>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Tipo" />
+                <SelectValue placeholder="Tipo de comida" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="colombiana">Colombiana</SelectItem>
-                <SelectItem value="japonesa">Japonesa</SelectItem>
-                <SelectItem value="italiana">Italiana</SelectItem>
-                <SelectItem value="mexicana">Mexicana</SelectItem>
+              <SelectContent className="max-h-[300px]">
+                <SelectItem value="Colombian">Colombiana</SelectItem>
+                <SelectItem value="Mexican">Mexicana</SelectItem>
+                <SelectItem value="Peruvian">Peruana</SelectItem>
+                <SelectItem value="Brazilian">Brasileña</SelectItem>
+                <SelectItem value="Italian">Italiana</SelectItem>
+                <SelectItem value="French">Francesa</SelectItem>
+                <SelectItem value="Spanish">Española</SelectItem>
+                <SelectItem value="Mediterranean">Mediterránea</SelectItem>
+                <SelectItem value="American">Americana</SelectItem>
+                <SelectItem value="Steakhouse">Parrilla</SelectItem>
+                <SelectItem value="Asian">Asiática</SelectItem>
+                <SelectItem value="Japanese">Japonesa</SelectItem>
+                <SelectItem value="Chinese">China</SelectItem>
+                <SelectItem value="Thai">Tailandesa</SelectItem>
+                <SelectItem value="Vietnamese">Vietnamita</SelectItem>
+                <SelectItem value="Korean">Coreana</SelectItem>
+                <SelectItem value="Indian">India</SelectItem>
               </SelectContent>
             </Select>
-            <Select>
+            <Select onValueChange={(value) => setFilters(prev => ({ ...prev, priceLevel: [value] }))}>
               <SelectTrigger className="flex-1">
                 <SelectValue placeholder="Precio" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="$">$</SelectItem>
-                <SelectItem value="$$">$$</SelectItem>
-                <SelectItem value="$$$">$$$</SelectItem>
-                <SelectItem value="$$$$">$$$$</SelectItem>
+                <SelectItem value="1">$</SelectItem>
+                <SelectItem value="2">$$</SelectItem>
+                <SelectItem value="3">$$$</SelectItem>
+                <SelectItem value="4">$$$$</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex gap-2">
-            <Select>
+            <Select 
+              onValueChange={(value) => {
+                setSelectedLocalidadId(value);
+                // Get localidad name and set neighborhood filter with all barrios from that localidad
+                const localidad = localidades.find(l => l.id_localidad === value);
+                if (localidad) {
+                  setFilters(prev => ({ ...prev, neighborhood: [], localidad: localidad.nombre }));
+                }
+              }}
+              disabled={loadingLocalidades}
+            >
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Ubicación" />
+                <SelectValue placeholder={loadingLocalidades ? "Cargando..." : "Localidad"} />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="chapinero">Chapinero</SelectItem>
-                <SelectItem value="usaquen">Usaquén</SelectItem>
-                <SelectItem value="zona-t">Zona T</SelectItem>
+              <SelectContent className="max-h-[300px]">
+                {localidades.map((localidad) => (
+                  <SelectItem key={localidad.id_localidad} value={localidad.id_localidad}>
+                    {localidad.nombre}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Select>
+            <Select 
+              onValueChange={(value) => {
+                const barrio = barrios.find(b => b.id_barrio === value);
+                if (barrio) {
+                  // Usar el mapeo para convertir barrio oficial a zonas comerciales
+                  const mappedNeighborhoods = neighborhoodMapping[barrio.nombre] || [barrio.nombre];
+                  setFilters(prev => ({ ...prev, neighborhood: mappedNeighborhoods }));
+                }
+              }}
+              disabled={!selectedLocalidadId || loadingBarrios}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder={
+                  !selectedLocalidadId 
+                    ? "Primero selecciona localidad" 
+                    : loadingBarrios 
+                      ? "Cargando..." 
+                      : "Barrio"
+                } />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {barrios.map((barrio) => (
+                  <SelectItem key={barrio.id_barrio} value={barrio.id_barrio}>
+                    {barrio.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select onValueChange={(value) => setFilters(prev => ({ ...prev, minRating: parseFloat(value) }))}>
               <SelectTrigger className="flex-1">
                 <SelectValue placeholder="Calificación" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="4">4+ estrellas</SelectItem>
-                <SelectItem value="3">3+ estrellas</SelectItem>
+                <SelectItem value="4.5">4.5+ estrellas</SelectItem>
+                <SelectItem value="4.0">4.0+ estrellas</SelectItem>
+                <SelectItem value="3.5">3.5+ estrellas</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex gap-2">
-            <Select>
+            <Select onValueChange={(value) => setFilters(prev => ({ ...prev, openNow: value === "true" }))}>
               <SelectTrigger className="flex-1">
                 <SelectValue placeholder="Disponibilidad" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ahora">Disponible ahora</SelectItem>
-                <SelectItem value="hoy">Disponible hoy</SelectItem>
+                <SelectItem value="true">Disponible ahora</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="icon">
-              <SlidersHorizontal className="h-4 w-4" />
+            <Button 
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setFilters({ cuisine: [], priceLevel: [], neighborhood: [], minRating: undefined, openNow: undefined });
+                setSelectedLocalidadId(null);
+                setMapSearchQuery("");
+              }}
+              disabled={activeFiltersCount === 0}
+            >
+              <SlidersHorizontal className="h-4 w-4 mr-2" />
+              Limpiar filtros
+              {activeFiltersCount > 0 && (
+                <Badge 
+                  variant="destructive" 
+                  className="ml-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                >
+                  {activeFiltersCount}
+                </Badge>
+              )}
             </Button>
           </div>
         </div>
 
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-3">
-            {filteredRestaurants.map((restaurant) => (
-              <div
-                key={restaurant.id}
-                className={`bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer border ${
-                  selectedRestaurant?.id === restaurant.id ? "border-primary ring-2 ring-primary/20" : "border-border"
-                }`}
-                onClick={() => handleRestaurantClick(restaurant)}
-              >
-                <img src={restaurant.imagen} alt={restaurant.nombre} className="w-full h-32 object-cover" />
-                <div className="p-3">
-                  <h3 className="font-semibold text-foreground mb-1">{restaurant.nombre}</h3>
-                  <div className="flex items-center justify-between text-sm">
-                    <Badge variant="secondary" className="text-xs">{restaurant.tipo}</Badge>
-                    <div className="flex items-center gap-2">
-                      <span className="text-yellow-500">⭐ {restaurant.calificacion}</span>
-                      <span className="text-muted-foreground">{restaurant.precio}</span>
+            {isLoading ? (
+              <div className="text-center text-muted-foreground py-8">Cargando restaurantes...</div>
+            ) : filteredRestaurants.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">No se encontraron restaurantes</div>
+            ) : (
+              filteredRestaurants.map((restaurant) => {
+                // Priorizar fotos del caché, luego Google Places, luego imagen por defecto
+                const photoUrl = restaurant.photos && restaurant.photos.length > 0
+                  ? getPhotoUrl(restaurant.photos[0], 400)
+                  : `https://source.unsplash.com/400x300/?restaurant,food,${encodeURIComponent(restaurant.cuisine || 'dining')}`;
+                
+                return (
+                  <div
+                    key={restaurant.id}
+                    className={`bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer border ${
+                      selectedRestaurant?.id === restaurant.id ? "border-primary ring-2 ring-primary/20" : "border-border"
+                    }`}
+                    onClick={() => handleRestaurantClick(restaurant)}
+                  >
+                    <img 
+                      src={photoUrl} 
+                      alt={restaurant.name} 
+                      className="w-full h-32 object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400';
+                      }}
+                    />
+                    <div className="p-3">
+                      <h3 className="font-semibold text-foreground mb-1">{restaurant.name}</h3>
+                      <div className="flex items-center justify-between text-sm">
+                        <Badge variant="secondary" className="text-xs">
+                          {getCuisineDisplay(restaurant)}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-500">⭐ {restaurant.rating?.toFixed(1) || 'N/A'}</span>
+                          <span className="text-muted-foreground">{restaurant.price_level || '$$'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
         </ScrollArea>
 
         <div className="p-4 border-t border-border">
-          <Button className="w-full" onClick={() => navigate("/chat-ia")}>
-            🤖 Recomiéndame algo
+          <Button 
+            className="w-full gap-2" 
+            onClick={() => setShowRecommendationModal(true)}
+          >
+            <Sparkles className="h-4 w-4" />
+            Recomiéndame algo
           </Button>
         </div>
       </div>
@@ -270,29 +461,43 @@ export default function Mapa() {
               zoomControl: false,
             }}
           >
-            {isLoaded && filteredRestaurants.map((restaurant) => (
-              <Marker
-                key={restaurant.id}
-                position={{ lat: restaurant.lat, lng: restaurant.lng }}
-                onClick={() => setSelectedRestaurant(restaurant)}
-                icon={restaurantIcon}
-              />
-            ))}
+            {isLoaded && filteredRestaurants
+              .filter(r => r.location?.lat && r.location?.lng)
+              .map((restaurant) => (
+                <Marker
+                  key={restaurant.id}
+                  position={{ lat: restaurant.location.lat, lng: restaurant.location.lng }}
+                  onClick={() => setSelectedRestaurant(restaurant)}
+                  icon={restaurantIcon}
+                />
+              ))}
 
-            {isLoaded && selectedRestaurant && (
+            {isLoaded && selectedRestaurant && selectedRestaurant.location?.lat && selectedRestaurant.location?.lng && (
               <InfoWindow
-                position={{ lat: selectedRestaurant.lat, lng: selectedRestaurant.lng }}
+                position={{ lat: selectedRestaurant.location.lat, lng: selectedRestaurant.location.lng }}
                 onCloseClick={() => setSelectedRestaurant(null)}
               >
                 <div className="w-48">
-                  <img src={selectedRestaurant.imagen} alt={selectedRestaurant.nombre} className="w-full h-24 object-cover rounded mb-2" />
-                  <h3 className="font-semibold text-sm mb-1">{selectedRestaurant.nombre}</h3>
-                  <p className="text-xs text-muted-foreground mb-2">{selectedRestaurant.tipo}</p>
+                  <img 
+                    src={selectedRestaurant.photos && selectedRestaurant.photos.length > 0
+                      ? getPhotoUrl(selectedRestaurant.photos[0], 400)
+                      : `https://source.unsplash.com/400x300/?restaurant,food,${encodeURIComponent(selectedRestaurant.cuisine || 'dining')}`
+                    } 
+                    alt={selectedRestaurant.name} 
+                    className="w-full h-24 object-cover rounded mb-2"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400';
+                    }}
+                  />
+                  <h3 className="font-semibold text-sm mb-1">{selectedRestaurant.name}</h3>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {getCuisineDisplay(selectedRestaurant)}
+                  </p>
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="text-yellow-500">⭐ {selectedRestaurant.calificacion}</span>
-                    <span className="text-muted-foreground">{selectedRestaurant.precio}</span>
+                    <span className="text-yellow-500">⭐ {selectedRestaurant.rating?.toFixed(1) || 'N/A'}</span>
+                    <span className="text-muted-foreground">{selectedRestaurant.price_level || '$$'}</span>
                   </div>
-                  <Button size="sm" className="w-full" onClick={() => navigate("/restaurante-detalle")}>
+                  <Button size="sm" className="w-full" onClick={() => navigate(`/restaurantes/${selectedRestaurant.place_id}`)}>
                     Ver detalles
                   </Button>
                 </div>
@@ -332,6 +537,14 @@ export default function Mapa() {
           </Button>
         </div>
       </div>
+
+      <QuickRecommendationModal
+        open={showRecommendationModal}
+        onOpenChange={setShowRecommendationModal}
+        restaurants={restaurants}
+        currentFilters={filters}
+        userLocation={userLocation || undefined}
+      />
     </div>
   );
 }
