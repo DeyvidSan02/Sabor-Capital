@@ -1,56 +1,139 @@
-import { Heart, Star, Clock, MapPin, DollarSign, MessageSquare, ArrowLeft } from "lucide-react";
+import { Heart, Star, Clock, MapPin, DollarSign, MessageSquare, ArrowLeft, Loader2, ExternalLink, Phone, Globe, AlertCircle, BarChart3 } from "lucide-react";
+import { useFavorites } from "@/hooks/useFavorites";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useRestaurantDetail, getPhotoUrl, getPriceInfo, formatCurrency } from "@/hooks/useRestaurants";
+import { useRestaurantReviews, useCreateReview } from "@/hooks/useReviews";
+import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
+import { useState } from "react";
+import { GoogleReview } from "@/lib/types";
+import { ReviewModal } from "@/components/ReviewModal";
 
 const RestauranteDetalle = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { id: placeId } = useParams<{ id: string }>();
+  const { data: restaurant, isLoading, error } = useRestaurantDetail(placeId);
+  const { data: communityReviews } = useRestaurantReviews(placeId);
+  const createReview = useCreateReview();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [showInfoWindow, setShowInfoWindow] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
-  // Mock data
-  const restaurant = {
-    name: "El Fogón de Doña Rosa",
-    description: "Restaurante de cocina tradicional colombiana",
-    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop",
-    category: "Cocina Tradicional",
-    priceRange: "$$ (COP 20,000 - 50,000)",
-    hours: "Lunes a Sábado: 12:00 PM - 10:00 PM",
-    address: "Calle 12 # 3-45, Bogotá",
-    rating: 4.5,
-    reviewCount: 127,
-    isFavorite: false
+  // Check if user came from chat
+  const fromChat = (location.state as any)?.fromChat;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-full bg-background">
+        <div className="border-b border-border bg-card px-6 py-4">
+          <Skeleton className="h-10 w-48" />
+        </div>
+        <Skeleton className="h-64 md:h-80 w-full" />
+        <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+          <Skeleton className="h-12 w-3/4" />
+          <Skeleton className="h-6 w-1/2" />
+          <div className="grid md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !restaurant) {
+    return (
+      <div className="min-h-full bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Restaurante no encontrado
+          </h2>
+          <p className="text-muted-foreground mb-4">
+            No pudimos encontrar los detalles de este restaurante.
+          </p>
+          <Button onClick={() => navigate("/restaurantes")}>
+            Volver a Restaurantes
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Obtener foto principal
+  const mainPhoto = restaurant.photos && restaurant.photos.length > 0
+    ? getPhotoUrl(restaurant.photos[0], 800)
+    : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop";
+
+  // Obtener fotos adicionales para el menú (si hay más de una foto)
+  const additionalPhotos = restaurant.photos && restaurant.photos.length > 1
+    ? restaurant.photos.slice(1, 4).map((photo: string) => getPhotoUrl(photo, 400))
+    : [];
+
+  // Formatear tipos de comida
+  const categories = restaurant.types && restaurant.types.length > 0
+    ? restaurant.types.slice(0, 3).map(type => type.replace(/_/g, " "))
+    : ["Restaurante"];
+
+  // Formatear horario
+  const openingHoursText = restaurant.opening_hours && restaurant.opening_hours.weekday_text
+    ? restaurant.opening_hours.weekday_text
+    : null;
+
+  // Obtener información de precio
+  const priceInfo = getPriceInfo(restaurant);
+
+  // Google reviews
+  const googleReviews: GoogleReview[] = restaurant.reviews || [];
+
+  // Calcular promedio de reseñas de la comunidad
+  const communityAvgRating = communityReviews && communityReviews.length > 0
+    ? communityReviews.reduce((sum, r) => sum + (r.calificacion || 0), 0) / communityReviews.length
+    : 0;
+
+  const handleCreateReview = (data: { calificacion: number; comentario: string }) => {
+    if (!placeId) return;
+    createReview.mutate(
+      { place_id: placeId, calificacion: data.calificacion, comentario: data.comentario },
+      { onSuccess: () => setShowReviewModal(false) }
+    );
   };
-
-  const menuItems = [
-    { name: "Ajiaco Santafereño", image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&auto=format&fit=crop" },
-    { name: "Bandeja Paisa", image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&auto=format&fit=crop" },
-    { name: "Lechona Tolimense", image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&auto=format&fit=crop" },
-  ];
-
-  const reviews = [
-    { user: "María G.", rating: 5, comment: "Excelente comida tradicional, el ajiaco es increíble!", date: "Hace 2 días" },
-    { user: "Carlos R.", rating: 4, comment: "Muy buen ambiente y atención. Los precios son justos.", date: "Hace 1 semana" },
-    { user: "Ana P.", rating: 5, comment: "El mejor restaurante colombiano de la zona!", date: "Hace 2 semanas" },
-  ];
 
   return (
     <div className="min-h-full bg-background">
       {/* Back Button */}
       <div className="border-b border-border bg-card px-6 py-4">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate('/restaurantes')}
-          className="gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver a Restaurantes
-        </Button>
+        {fromChat ? (
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/chat-ia')}
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver a la conversación
+          </Button>
+        ) : (
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/restaurantes')}
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver a Restaurantes
+          </Button>
+        )}
       </div>
 
       {/* Hero Image */}
       <div className="relative h-64 md:h-80 overflow-hidden bg-muted">
         <img 
-          src={restaurant.image} 
+          src={mainPhoto} 
           alt={restaurant.name}
           className="w-full h-full object-cover"
         />
@@ -62,39 +145,66 @@ const RestauranteDetalle = () => {
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
-            <div>
+            <div className="flex-1">
               <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
                 {restaurant.name}
               </h1>
-              <p className="text-muted-foreground">{restaurant.description}</p>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {categories.map((category, i) => (
+                  <Badge key={i} variant="secondary">
+                    {category}
+                  </Badge>
+                ))}
+              </div>
+              {restaurant.neighborhood && (
+                <p className="text-muted-foreground">{restaurant.neighborhood}</p>
+              )}
             </div>
             
             {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button variant="outline" size="lg" className="gap-2">
-                <Heart className="h-5 w-5" />
-                Guardar
+            <div className="flex flex-wrap gap-3">
+              <Button 
+                variant={isFavorite(placeId || '') ? "default" : "outline"} 
+                size="lg" 
+                className="gap-2"
+                onClick={() => placeId && toggleFavorite(placeId)}
+              >
+                <Heart className={`h-5 w-5 ${isFavorite(placeId || '') ? 'fill-current' : ''}`} />
+                {isFavorite(placeId || '') ? 'Guardado' : 'Guardar'}
               </Button>
-              <Button size="lg" className="gap-2">
+              <Button size="lg" className="gap-2" onClick={() => setShowReviewModal(true)}>
                 <MessageSquare className="h-5 w-5" />
                 Escribir Reseña
+              </Button>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                className="gap-2"
+                onClick={() => navigate(`/restaurantes/${placeId}/estadisticas`)}
+              >
+                <BarChart3 className="h-5 w-5" />
+                Estadísticas
               </Button>
             </div>
           </div>
 
           {/* Rating Summary */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star 
-                  key={star} 
-                  className={`h-5 w-5 ${star <= restaurant.rating ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
-                />
-              ))}
+          {restaurant.rating && (
+            <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star 
+                    key={star} 
+                    className={`h-5 w-5 ${star <= Math.round(restaurant.rating!) ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
+                  />
+                ))}
+              </div>
+              <span className="text-lg font-semibold text-foreground">{restaurant.rating.toFixed(1)}</span>
+              {restaurant.user_ratings_total && (
+                <span className="text-muted-foreground">({restaurant.user_ratings_total} reseñas)</span>
+              )}
             </div>
-            <span className="text-lg font-semibold text-foreground">{restaurant.rating}</span>
-            <span className="text-muted-foreground">({restaurant.reviewCount} reseñas)</span>
-          </div>
+          )}
         </div>
 
         {/* Information Grid */}
@@ -103,25 +213,23 @@ const RestauranteDetalle = () => {
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
                 <Badge variant="secondary" className="mt-1">
-                  <Star className="h-3 w-3" />
-                </Badge>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Categoría</p>
-                  <p className="font-medium text-foreground">{restaurant.category}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <Badge variant="secondary" className="mt-1">
                   <DollarSign className="h-3 w-3" />
                 </Badge>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Rango de precios</p>
-                  <p className="font-medium text-foreground">{restaurant.priceRange}</p>
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground mb-1">Precio</p>
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">
+                      {priceInfo.symbols} ({priceInfo.label})
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {priceInfo.range}
+                    </p>
+                    {restaurant.min_price && restaurant.max_price && (
+                      <p className="text-xs text-muted-foreground">
+                        Promedio: {formatCurrency(priceInfo.avgPrice)}/persona
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -134,8 +242,16 @@ const RestauranteDetalle = () => {
                   <Clock className="h-3 w-3" />
                 </Badge>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Horario</p>
-                  <p className="font-medium text-foreground">{restaurant.hours}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Estado</p>
+                  <p className="font-medium text-foreground">
+                    {restaurant.open_now ? (
+                      <span className="text-green-600">Abierto ahora</span>
+                    ) : restaurant.open_now === false ? (
+                      <span className="text-red-600">Cerrado</span>
+                    ) : (
+                      "No disponible"
+                    )}
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -149,121 +265,459 @@ const RestauranteDetalle = () => {
                 </Badge>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Dirección</p>
-                  <p className="font-medium text-foreground">{restaurant.address}</p>
+                  <p className="font-medium text-foreground text-sm line-clamp-2">
+                    {restaurant.formatted_address || "No disponible"}
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {restaurant.phone_number && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Badge variant="secondary" className="mt-1">
+                    <Phone className="h-3 w-3" />
+                  </Badge>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Teléfono</p>
+                    <a 
+                      href={`tel:${restaurant.phone_number}`}
+                      className="font-medium text-foreground hover:text-primary text-sm"
+                    >
+                      {restaurant.phone_number}
+                    </a>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
+
+        {/* Contact Info */}
+        {restaurant.website && (
+          <Card className="mb-8">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Globe className="h-5 w-5 text-muted-foreground" />
+                <a
+                  href={restaurant.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline flex items-center gap-2"
+                >
+                  Visitar sitio web
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Opening Hours */}
+        {openingHoursText && (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Horario
+              </h2>
+              <div className="space-y-2">
+                {openingHoursText.map((text: string, i: number) => (
+                  <p key={i} className="text-sm text-muted-foreground">{text}</p>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Description */}
+        {restaurant.description && (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-bold text-foreground mb-4">Acerca de {restaurant.name}</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                {restaurant.description}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Map Section */}
-        <Card className="mb-8">
-          <CardContent className="p-0">
-            <div className="relative h-80 bg-muted rounded-lg overflow-hidden">
-              <img 
-                src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&auto=format&fit=crop"
-                alt="Mapa de ubicación"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <Badge className="bg-background/90 text-foreground">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  {restaurant.address}
-                </Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Menu Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-4">Menú</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {menuItems.map((item, index) => (
-              <Card key={index} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="relative h-48 overflow-hidden">
-                  <img 
-                    src={item.image}
-                    alt={item.name}
-                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                  />
-                </div>
-                <CardContent className="p-4">
-                  <h3 className="font-semibold text-foreground">{item.name}</h3>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Reviews Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-foreground">Reseñas y Calificaciones</h2>
-            <Button variant="outline">Ver todas las reseñas</Button>
-          </div>
-
-          {/* Rating Summary Card */}
-          <Card className="mb-6 bg-muted/50">
+        {restaurant.location && (
+          <Card className="mb-8">
             <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row md:items-center gap-6">
-                <div className="text-center md:text-left">
-                  <div className="text-5xl font-bold text-foreground mb-2">{restaurant.rating}</div>
-                  <div className="flex items-center gap-1 mb-2 justify-center md:justify-start">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Star 
-                        key={star} 
-                        className={`h-5 w-5 ${star <= restaurant.rating ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
+              <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Ubicación
+              </h2>
+              
+              <div className="relative h-80 bg-muted rounded-lg overflow-hidden mb-4">
+                {restaurant.location?.lat && restaurant.location?.lng ? (
+                  <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}>
+                    <GoogleMap
+                      mapContainerStyle={{ width: '100%', height: '320px' }}
+                      center={{ lat: restaurant.location.lat, lng: restaurant.location.lng }}
+                      zoom={16}
+                      onLoad={(mapInstance) => setMap(mapInstance)}
+                      options={{
+                        zoomControl: true,
+                        streetViewControl: false,
+                        mapTypeControl: false,
+                        fullscreenControl: true,
+                      }}
+                    >
+                      <Marker
+                        position={{ lat: restaurant.location.lat, lng: restaurant.location.lng }}
+                        onClick={() => setShowInfoWindow(true)}
+                        title={restaurant.name}
                       />
-                    ))}
+                      
+                      {showInfoWindow && (
+                        <InfoWindow
+                          position={{ lat: restaurant.location.lat, lng: restaurant.location.lng }}
+                          onCloseClick={() => setShowInfoWindow(false)}
+                        >
+                          <div className="p-2">
+                            <h3 className="font-semibold text-sm">{restaurant.name}</h3>
+                            <p className="text-xs text-muted-foreground">{restaurant.formatted_address}</p>
+                          </div>
+                        </InfoWindow>
+                      )}
+                    </GoogleMap>
+                  </LoadScript>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-muted/50">
+                    <div className="text-center p-6">
+                      <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                      <p className="text-muted-foreground text-sm">
+                        Mapa no disponible
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">{restaurant.reviewCount} opiniones</p>
-                </div>
-                <div className="flex-1">
-                  <p className="text-muted-foreground mb-4">
-                    Basado en {restaurant.reviewCount} reseñas verificadas de clientes que han visitado este restaurante.
-                  </p>
-                  <Button className="w-full md:w-auto gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    Escribir mi reseña
-                  </Button>
-                </div>
+                )}
+              </div>
+
+              {/* Fallback - Botón para abrir en Google Maps */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 gap-2"
+                  asChild
+                >
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.formatted_address || restaurant.name)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Abrir en Google Maps
+                  </a>
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  className="flex-1 gap-2"
+                  asChild
+                >
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurant.formatted_address || restaurant.name)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    Cómo llegar
+                  </a>
+                </Button>
+              </div>
+
+              {/* Nota sobre disponibilidad del mapa */}
+              <div className="mt-4 p-3 bg-muted rounded-lg flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  Si el mapa no se visualiza correctamente, puedes usar los botones de arriba para ver la ubicación directamente en Google Maps.
+                </p>
               </div>
             </CardContent>
           </Card>
+        )}
 
-          {/* Individual Reviews */}
-          <div className="space-y-4">
-            {reviews.map((review, index) => (
-              <Card key={index}>
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-primary font-semibold">
-                        {review.user.charAt(0)}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold text-foreground">{review.user}</h4>
-                        <span className="text-sm text-muted-foreground">• {review.date}</span>
-                      </div>
-                      <div className="flex items-center gap-1 mb-2">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <Star 
-                            key={star} 
-                            className={`h-4 w-4 ${star <= review.rating ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
-                          />
-                        ))}
-                      </div>
-                      <p className="text-muted-foreground">{review.comment}</p>
-                    </div>
+        {/* Gallery Section */}
+        {additionalPhotos.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4">Galería</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {additionalPhotos.map((photoUrl, index) => (
+                <Card key={index} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <div className="relative h-48 overflow-hidden">
+                    <img 
+                      src={photoUrl}
+                      alt={`${restaurant.name} foto ${index + 1}`}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                </Card>
+              ))}
+            </div>
           </div>
+        )}
+
+        {/* Reviews Section - Tabs */}
+        <div className="mb-8">
+          <Tabs defaultValue="google" className="w-full">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="google">
+                Reseñas de Google ({restaurant.user_ratings_total || 0})
+              </TabsTrigger>
+              <TabsTrigger value="community">
+                Reseñas de la Comunidad ({communityReviews?.length || 0})
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Google Reviews Tab */}
+            <TabsContent value="google" className="mt-6">
+              <div className="space-y-6">
+                {/* Calificación Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold text-foreground">Calificación</h2>
+                    <Button variant="outline" size="sm" asChild>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.place_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="gap-2"
+                      >
+                        Ver en Google Maps
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+
+                  {restaurant.rating ? (
+                    <Card className="bg-muted/50">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col md:flex-row md:items-center gap-6">
+                          <div className="text-center md:text-left">
+                            <div className="text-5xl font-bold text-foreground mb-2">
+                              {restaurant.rating.toFixed(1)}
+                            </div>
+                            <div className="flex items-center gap-1 mb-2 justify-center md:justify-start">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star 
+                                  key={star} 
+                                  className={`h-5 w-5 ${star <= Math.round(restaurant.rating!) ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
+                                />
+                              ))}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {restaurant.user_ratings_total?.toLocaleString('es-CO')} opiniones en Google
+                            </p>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-muted-foreground">
+                              Esta calificación proviene de reseñas verificadas de Google Maps.
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card>
+                      <CardContent className="p-6">
+                        <p className="text-muted-foreground text-center">
+                          No hay calificación disponible para este restaurante
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Reseñas Individuales Section */}
+                <div>
+                  <h3 className="text-xl font-semibold text-foreground mb-4">Reseñas</h3>
+                  {googleReviews.length > 0 ? (
+                    <div className="space-y-4">
+                      {googleReviews.slice(0, 5).map((review, index) => (
+                        <Card key={index}>
+                          <CardContent className="p-6">
+                            <div className="flex items-start gap-4">
+                              {review.author_photo && (
+                                <img 
+                                  src={review.author_photo} 
+                                  alt={review.author_name}
+                                  className="w-10 h-10 rounded-full"
+                                />
+                              )}
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <p className="font-semibold">{review.author_name}</p>
+                                  {review.relative_time && (
+                                    <span className="text-xs text-muted-foreground">
+                                      • {review.relative_time}
+                                    </span>
+                                  )}
+                                </div>
+                                {review.rating && (
+                                  <div className="flex items-center gap-1 mb-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <Star 
+                                        key={star} 
+                                        className={`h-4 w-4 ${star <= review.rating! ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="text-muted-foreground">{review.text}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {restaurant.user_ratings_total && restaurant.user_ratings_total > 5 && (
+                        <Card className="bg-muted/20">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-sm text-muted-foreground">
+                              Mostrando {Math.min(5, googleReviews.length)} de {restaurant.user_ratings_total.toLocaleString('es-CO')} reseñas.{" "}
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.place_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                Ver todas en Google Maps
+                              </a>
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  ) : (
+                    <Card className="bg-muted/20">
+                      <CardContent className="p-8 text-center">
+                        <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-muted-foreground mb-2">
+                          Las reseñas individuales no están disponibles en este momento
+                        </p>
+                        {restaurant.user_ratings_total && restaurant.user_ratings_total > 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            Aunque este restaurante tiene {restaurant.user_ratings_total.toLocaleString('es-CO')} opiniones en Google,{" "}
+                            el detalle de las reseñas no está disponible temporalmente.{" "}
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.place_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              Ver en Google Maps
+                            </a>
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Community Reviews Tab */}
+            <TabsContent value="community" className="mt-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-foreground">Reseñas de la Comunidad</h2>
+                  <Button size="sm" onClick={() => setShowReviewModal(true)}>
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Escribir Reseña
+                  </Button>
+                </div>
+
+                {communityAvgRating > 0 && (
+                  <Card className="bg-muted/50">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-6">
+                        <div className="text-center">
+                          <div className="text-5xl font-bold text-foreground mb-2">
+                            {communityAvgRating.toFixed(1)}
+                          </div>
+                          <div className="flex items-center gap-1 mb-2">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star 
+                                key={star} 
+                                className={`h-5 w-5 ${star <= Math.round(communityAvgRating) ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {communityReviews?.length} reseñas
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Display Community Reviews */}
+                {communityReviews && communityReviews.length > 0 ? (
+                  <div className="space-y-4">
+                    {communityReviews.map((review) => (
+                      <Card key={review.id_resena}>
+                        <CardContent className="p-6">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant="secondary">Usuario</Badge>
+                            {review.fecha_resena && (
+                              <span className="text-xs text-muted-foreground">
+                                • {new Date(review.fecha_resena).toLocaleDateString('es-CO')}
+                              </span>
+                            )}
+                          </div>
+                          {review.calificacion && (
+                            <div className="flex items-center gap-1 mb-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star 
+                                  key={star} 
+                                  className={`h-4 w-4 ${star <= review.calificacion! ? 'fill-yellow-500 text-yellow-500' : 'text-muted'}`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-muted-foreground">{review.comentario}</p>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Card>
+                    <CardContent className="p-12 text-center">
+                      <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                      <h3 className="text-lg font-semibold text-foreground mb-2">
+                        Sé el primero en reseñar
+                      </h3>
+                      <p className="text-muted-foreground mb-4">
+                        Comparte tu experiencia en este restaurante
+                      </p>
+                      <Button onClick={() => setShowReviewModal(true)}>
+                        Escribir Reseña
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
+
+        {/* Review Modal */}
+        {placeId && (
+          <ReviewModal
+            open={showReviewModal}
+            onOpenChange={setShowReviewModal}
+            restaurantName={restaurant.name}
+            placeId={placeId}
+            onSubmit={handleCreateReview}
+            isLoading={createReview.isPending}
+          />
+        )}
       </div>
     </div>
   );
