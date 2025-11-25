@@ -10,14 +10,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { registroSchema, RegistroFormData } from "@/lib/validations";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, EyeOff } from "lucide-react";
+import { useTheme } from "next-themes";
+import loginBgDark from "@/assets/login-bg-dark.png";
+import loginBgLight from "@/assets/login-bg-light.png";
+import { useLocalidades, useBarriosPorLocalidad } from "@/hooks/useBarriosBogota";
+import { LocationCombobox } from "@/components/LocationCombobox";
 
 const Registro = () => {
   const { signUp, signInWithGoogle, user } = useAuth();
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedPreferences, setSelectedPreferences] = useState<string[]>([]);
+  const [selectedLocalidadId, setSelectedLocalidadId] = useState<string | null>(null);
 
   const {
     register,
@@ -25,21 +32,37 @@ const Registro = () => {
     formState: { errors },
     setValue,
     watch,
+    trigger,
   } = useForm<RegistroFormData>({
     resolver: zodResolver(registroSchema),
     defaultValues: {
       tipo_comida: [],
       presupuesto: "",
+      id_localidad: "",
+      id_barrio: "",
     },
   });
 
   const presupuestoValue = watch("presupuesto");
+  const watchLocalidadId = watch("id_localidad");
+  const watchBarrioId = watch("id_barrio");
+
+  // Cargar localidades y barrios
+  const { data: localidades = [], isLoading: loadingLocalidades } = useLocalidades();
+  const { data: barrios = [], isLoading: loadingBarrios } = useBarriosPorLocalidad(selectedLocalidadId);
 
   useEffect(() => {
     if (user) {
       navigate('/dashboard');
     }
   }, [user, navigate]);
+  
+  // Sincronizar selectedLocalidadId con el valor del formulario
+  useEffect(() => {
+    if (watchLocalidadId && watchLocalidadId !== selectedLocalidadId) {
+      setSelectedLocalidadId(watchLocalidadId);
+    }
+  }, [watchLocalidadId, selectedLocalidadId]);
 
   const preferences = [
     "Italiana",
@@ -60,6 +83,20 @@ const Registro = () => {
       : [...selectedPreferences, preference];
     setSelectedPreferences(updated);
     setValue("tipo_comida", updated);
+    trigger("tipo_comida");
+  };
+
+  // Función para permitir solo números en el teléfono
+  const handlePhoneInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight'];
+    
+    if (allowedKeys.includes(e.key) || 
+        (e.key >= '0' && e.key <= '9') ||
+        (e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key))) {
+      return;
+    }
+    
+    e.preventDefault();
   };
 
   const onSubmit = async (data: RegistroFormData) => {
@@ -72,7 +109,8 @@ const Registro = () => {
       telefono: data.telefono,
       tipo_comida: data.tipo_comida,
       presupuesto: data.presupuesto,
-      ubicacion: data.ubicacion,
+      id_localidad: data.id_localidad,
+      id_barrio: data.id_barrio,
     });
     setIsLoading(false);
   };
@@ -83,10 +121,21 @@ const Registro = () => {
     setIsLoading(false);
   };
 
+  const backgroundImage = theme === "dark" ? loginBgDark : loginBgLight;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/5">
+    <div 
+      className="min-h-screen relative"
+      style={{
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" />
       {/* Header */}
-      <header className="border-b border-border/40 bg-card/50 backdrop-blur-sm">
+      <header className="border-b border-border/40 bg-background/60 backdrop-blur-md relative z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -106,7 +155,7 @@ const Registro = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-12 max-w-6xl">
+      <main className="container mx-auto px-4 py-12 max-w-6xl relative z-10">
         {/* Hero Section */}
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4 bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
@@ -127,12 +176,15 @@ const Registro = () => {
               {/* Nombre y Apellidos */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nombre">Nombre</Label>
+                  <Label htmlFor="nombre" className="flex items-center gap-1">
+                    Nombre <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="nombre"
                     type="text"
                     placeholder="Juan"
                     {...register("nombre")}
+                    required
                   />
                   {errors.nombre && (
                     <p className="text-sm text-destructive">{errors.nombre.message}</p>
@@ -140,12 +192,15 @@ const Registro = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="apellidos">Apellidos</Label>
+                  <Label htmlFor="apellidos" className="flex items-center gap-1">
+                    Apellidos <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="apellidos"
                     type="text"
                     placeholder="Pérez García"
                     {...register("apellidos")}
+                    required
                   />
                   {errors.apellidos && (
                     <p className="text-sm text-destructive">{errors.apellidos.message}</p>
@@ -155,12 +210,15 @@ const Registro = () => {
 
               {/* Correo electrónico */}
               <div className="space-y-2">
-                <Label htmlFor="email">Correo electrónico</Label>
+                <Label htmlFor="email" className="flex items-center gap-1">
+                  Correo electrónico <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="tu@correo.com"
                   {...register("email")}
+                  required
                 />
                 {errors.email && (
                   <p className="text-sm text-destructive">{errors.email.message}</p>
@@ -169,36 +227,102 @@ const Registro = () => {
 
               {/* Teléfono */}
               <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono</Label>
+                <Label htmlFor="telefono" className="flex items-center gap-1">
+                  Teléfono <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="telefono"
                   type="tel"
-                  placeholder="+52 55 1234 5678"
+                  placeholder="3001234567"
                   {...register("telefono")}
+                  onKeyDown={handlePhoneInput}
+                  maxLength={10}
+                  required
                 />
                 {errors.telefono && (
                   <p className="text-sm text-destructive">{errors.telefono.message}</p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Ingresa tu número de celular (10 dígitos)
+                </p>
               </div>
 
-              {/* Ubicación */}
-              <div className="space-y-2">
-                <Label htmlFor="ubicacion">Ubicación</Label>
-                <Input
-                  id="ubicacion"
-                  type="text"
-                  placeholder="Bogotá - Chapinero"
-                  {...register("ubicacion")}
-                />
-                {errors.ubicacion && (
-                  <p className="text-sm text-destructive">{errors.ubicacion.message}</p>
-                )}
+              {/* Localidad y Barrio */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="id_localidad" className="flex items-center gap-1">
+                    Localidad <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={watchLocalidadId || ""}
+                    onValueChange={(value) => {
+                      setValue("id_localidad", value);
+                      setSelectedLocalidadId(value);
+                      setValue("id_barrio", "");
+                      trigger("id_localidad");
+                    }}
+                    disabled={loadingLocalidades}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        loadingLocalidades 
+                          ? "Cargando localidades..." 
+                          : "Selecciona una localidad"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {localidades.map((loc) => (
+                        <SelectItem key={loc.id_localidad} value={loc.id_localidad}>
+                          {loc.numero}. {loc.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.id_localidad && (
+                    <p className="text-sm text-destructive">{errors.id_localidad.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="id_barrio" className="flex items-center gap-1">
+                    Barrio <span className="text-destructive">*</span>
+                  </Label>
+                  <LocationCombobox
+                    options={barrios.map(barrio => ({
+                      value: barrio.id_barrio,
+                      label: barrio.nombre
+                    }))}
+                    value={watchBarrioId || ""}
+                    onValueChange={(value) => {
+                      setValue("id_barrio", value);
+                      trigger("id_barrio");
+                    }}
+                    placeholder={
+                      !selectedLocalidadId 
+                        ? "Primero selecciona localidad" 
+                        : loadingBarrios
+                          ? "Cargando barrios..."
+                          : barrios.length === 0
+                            ? "No hay barrios para esta localidad"
+                            : "Selecciona un barrio"
+                    }
+                    searchPlaceholder="Buscar barrio..."
+                    emptyText="No se encontró el barrio"
+                    disabled={!selectedLocalidadId || loadingBarrios}
+                  />
+                  {errors.id_barrio && (
+                    <p className="text-sm text-destructive">{errors.id_barrio.message}</p>
+                  )}
+                </div>
               </div>
 
               {/* Contraseñas */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="password">Contraseña</Label>
+                  <Label htmlFor="password" className="flex items-center gap-1">
+                    Contraseña <span className="text-destructive">*</span>
+                  </Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -206,6 +330,7 @@ const Registro = () => {
                       placeholder="••••••••"
                       {...register("password")}
                       className="pr-10"
+                      required
                     />
                     <button
                       type="button"
@@ -221,7 +346,9 @@ const Registro = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirmar</Label>
+                  <Label htmlFor="confirmPassword" className="flex items-center gap-1">
+                    Confirmar <span className="text-destructive">*</span>
+                  </Label>
                   <div className="relative">
                     <Input
                       id="confirmPassword"
@@ -229,6 +356,7 @@ const Registro = () => {
                       placeholder="••••••••"
                       {...register("confirmPassword")}
                       className="pr-10"
+                      required
                     />
                     <button
                       type="button"
@@ -246,8 +374,17 @@ const Registro = () => {
 
               {/* Presupuesto */}
               <div className="space-y-2">
-                <Label htmlFor="presupuesto">Presupuesto promedio por comida</Label>
-                <Select value={presupuestoValue} onValueChange={(value) => setValue("presupuesto", value)}>
+                <Label htmlFor="presupuesto" className="flex items-center gap-1">
+                  Presupuesto promedio <span className="text-destructive">*</span>
+                </Label>
+                <Select 
+                  value={presupuestoValue} 
+                  onValueChange={(value) => {
+                    setValue("presupuesto", value);
+                    trigger("presupuesto");
+                  }}
+                  required
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona tu presupuesto" />
                   </SelectTrigger>
@@ -266,7 +403,9 @@ const Registro = () => {
               {/* Preferencias gastronómicas */}
               <div className="space-y-3 pt-2">
                 <div>
-                  <Label className="text-base">Preferencias Gastronómicas</Label>
+                  <Label className="text-base flex items-center gap-1">
+                    Preferencias Gastronómicas <span className="text-destructive">*</span>
+                  </Label>
                   <p className="text-sm text-muted-foreground mt-1">
                     Selecciona al menos una preferencia
                   </p>
@@ -290,6 +429,9 @@ const Registro = () => {
                 {errors.tipo_comida && (
                   <p className="text-sm text-destructive">{errors.tipo_comida.message}</p>
                 )}
+                <div className="text-xs text-muted-foreground">
+                  {selectedPreferences.length} preferencias seleccionadas
+                </div>
               </div>
 
               <div className="space-y-3 pt-4">
