@@ -14,35 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      barrio: {
-        Row: {
-          created_at: string | null
-          id_barrio: string
-          id_localidad: string
-          nombre: string
-        }
-        Insert: {
-          created_at?: string | null
-          id_barrio?: string
-          id_localidad: string
-          nombre: string
-        }
-        Update: {
-          created_at?: string | null
-          id_barrio?: string
-          id_localidad?: string
-          nombre?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "barrio_id_localidad_fkey"
-            columns: ["id_localidad"]
-            isOneToOne: false
-            referencedRelation: "localidad"
-            referencedColumns: ["id_localidad"]
-          },
-        ]
-      }
       chat_conversacion: {
         Row: {
           fecha_actualizacion: string | null
@@ -169,27 +140,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      localidad: {
-        Row: {
-          created_at: string | null
-          id_localidad: string
-          nombre: string
-          numero: number
-        }
-        Insert: {
-          created_at?: string | null
-          id_localidad?: string
-          nombre: string
-          numero: number
-        }
-        Update: {
-          created_at?: string | null
-          id_localidad?: string
-          nombre?: string
-          numero?: number
-        }
-        Relationships: []
       }
       log_accion: {
         Row: {
@@ -360,8 +310,6 @@ export type Database = {
           fecha_registro: string | null
           foto_url: string | null
           id: string
-          id_barrio: string | null
-          id_localidad: string | null
           nombre: string | null
           onboarding_completed: boolean | null
           presupuesto: string | null
@@ -375,8 +323,6 @@ export type Database = {
           fecha_registro?: string | null
           foto_url?: string | null
           id: string
-          id_barrio?: string | null
-          id_localidad?: string | null
           nombre?: string | null
           onboarding_completed?: boolean | null
           presupuesto?: string | null
@@ -390,8 +336,6 @@ export type Database = {
           fecha_registro?: string | null
           foto_url?: string | null
           id?: string
-          id_barrio?: string | null
-          id_localidad?: string | null
           nombre?: string | null
           onboarding_completed?: boolean | null
           presupuesto?: string | null
@@ -399,22 +343,7 @@ export type Database = {
           tipo_comida?: string[] | null
           ubicacion?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "usuario_id_barrio_fkey"
-            columns: ["id_barrio"]
-            isOneToOne: false
-            referencedRelation: "barrio"
-            referencedColumns: ["id_barrio"]
-          },
-          {
-            foreignKeyName: "usuario_id_localidad_fkey"
-            columns: ["id_localidad"]
-            isOneToOne: false
-            referencedRelation: "localidad"
-            referencedColumns: ["id_localidad"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {

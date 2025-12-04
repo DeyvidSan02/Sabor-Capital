@@ -9,22 +9,17 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
-        
-        // Si hay sesión pero no está marcado "recordarme", verificar
-        if (session && !localStorage.getItem('rememberMe')) {
-          // No hacer nada aquí, dejar que la sesión persista hasta cerrar navegador
-        }
-        
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    // Revisar si existe la sesión
+    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Initial session check:', session?.user?.email);
       setSession(session);
@@ -102,7 +97,7 @@ export const useAuth = () => {
     }
   };
 
-  const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
+  const signIn = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -125,13 +120,6 @@ export const useAuth = () => {
         await supabase.auth.signOut();
         toast.error('Debes confirmar tu correo electrónico antes de acceder. Revisa tu bandeja de entrada.');
         return { error: new Error('Email not confirmed') };
-      }
-
-      // Guardar preferencia de "recordarme"
-      if (rememberMe) {
-        localStorage.setItem('rememberMe', 'true');
-      } else {
-        localStorage.removeItem('rememberMe');
       }
 
       toast.success('¡Bienvenido!');
@@ -185,49 +173,8 @@ export const useAuth = () => {
     }
   };
 
-  const resetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return { error };
-      }
-
-      toast.success('Correo de recuperación enviado. Revisa tu bandeja de entrada.');
-      return { error: null };
-    } catch (error: any) {
-      toast.error('Error al enviar el correo de recuperación');
-      return { error };
-    }
-  };
-
-  const updatePassword = async (newPassword: string) => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return { error };
-      }
-
-      toast.success('Contraseña actualizada exitosamente');
-      return { error: null };
-    } catch (error: any) {
-      toast.error('Error al actualizar la contraseña');
-      return { error };
-    }
-  };
-
   const signOut = async () => {
     try {
-      // Limpiar preferencia de "recordarme"
-      localStorage.removeItem('rememberMe');
-      
       const { error } = await supabase.auth.signOut();
       if (error) {
         toast.error(error.message);
@@ -251,7 +198,5 @@ export const useAuth = () => {
     signOut,
     checkOnboardingStatus,
     resendConfirmationEmail,
-    resetPassword,
-    updatePassword,
   };
 };

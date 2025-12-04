@@ -2,7 +2,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -19,18 +18,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, LoginFormData } from "@/lib/validations";
 import { useEffect, useState } from "react";
-import { useTheme } from "next-themes";
-import loginBgDark from "@/assets/login-bg-dark.png";
-import loginBgLight from "@/assets/login-bg-light.png";
 
 const Login = () => {
   const { signIn, signInWithGoogle, user, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
-  const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [showResendDialog, setShowResendDialog] = useState(false);
   const [resendEmail, setResendEmail] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
 
   const {
     register,
@@ -49,7 +43,7 @@ const Login = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
-    const result = await signIn(data.email, data.password, rememberMe);
+    const result = await signIn(data.email, data.password);
     setIsLoading(false);
 
     if (result.error?.message?.includes('Email not confirmed')) {
@@ -75,21 +69,10 @@ const Login = () => {
     }
   };
 
-  const backgroundImage = theme === "dark" ? loginBgDark : loginBgLight;
-
   return (
-    <div 
-      className="min-h-screen flex flex-col relative"
-      style={{
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      }}
-    >
-      <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" />
+    <div className="min-h-screen bg-gradient-subtle flex flex-col">
       {/* Header */}
-      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-border bg-background/60 backdrop-blur-md relative z-10">
+      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-lg">S</span>
@@ -107,7 +90,7 @@ const Login = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center px-4 py-12 relative z-10">
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md space-y-8">
           {/* Hero Title */}
           <div className="text-center space-y-2">
@@ -116,13 +99,13 @@ const Login = () => {
 
           {/* Login Card */}
           <Card className="shadow-lg">
-            <CardHeader className="space-y-3 pb-6">
+            <CardHeader className="space-y-1">
               <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
               <CardDescription>Ingresa tus credenciales para acceder</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="space-y-3">
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div className="space-y-2">
                   <Label htmlFor="email">Correo electrónico</Label>
                   <Input
                     id="email"
@@ -136,7 +119,7 @@ const Login = () => {
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <Label htmlFor="password">Contraseña</Label>
                   <Input
                     id="password"
@@ -150,33 +133,19 @@ const Login = () => {
                   )}
                 </div>
 
-                <div className="flex items-center space-x-2 pt-1">
-                  <Checkbox
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                  />
-                  <Label
-                    htmlFor="remember"
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Recordarme
-                  </Label>
-                </div>
-
-                <Button className="w-full mt-2" size="lg" type="submit" disabled={isLoading}>
+                <Button className="w-full" size="lg" type="submit" disabled={isLoading}>
                   {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
                 </Button>
               </form>
 
-              <div className="text-center mt-4">
+              <div className="text-center">
                 <Link to="/recuperar-contrasena" className="text-sm text-primary hover:underline">
                   ¿Olvidaste tu contraseña?
                 </Link>
               </div>
 
               {/* Divider */}
-              <div className="relative my-6">
+              <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t border-border" />
                 </div>
@@ -212,7 +181,7 @@ const Login = () => {
                 Acceder con Google
               </Button>
 
-              <div className="text-center text-sm text-muted-foreground space-y-3 mt-6">
+              <div className="text-center text-sm text-muted-foreground space-y-2">
                 <p>
                   ¿No tienes cuenta?{" "}
                   <Link to="/registro" className="text-primary hover:underline font-medium">

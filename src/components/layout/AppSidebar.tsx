@@ -11,19 +11,8 @@ import {
   LogOut
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 import {
   Sidebar,
@@ -56,19 +45,9 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
-  const navigate = useNavigate();
   const { signOut } = useAuth();
-  const [showSignOutDialog, setShowSignOutDialog] = useState(false);
 
   const isActive = (path: string) => currentPath === path;
-
-  const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (!error) {
-      navigate("/login", { replace: true });
-    }
-    setShowSignOutDialog(false);
-  };
 
   return (
     <Sidebar collapsible="icon">
@@ -119,7 +98,7 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => setShowSignOutDialog(true)}>
+                <SidebarMenuButton onClick={() => signOut()}>
                   <LogOut className="h-4 w-4" />
                   <span>Cerrar sesión</span>
                 </SidebarMenuButton>
@@ -128,23 +107,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
-      <AlertDialog open={showSignOutDialog} onOpenChange={setShowSignOutDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro que deseas cerrar sesión?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se cerrará tu sesión actual y tendrás que volver a iniciar sesión para acceder a tu cuenta.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSignOut}>
-              Cerrar sesión
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Sidebar>
   );
 }
