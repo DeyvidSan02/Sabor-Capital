@@ -8,6 +8,8 @@ import { MainLayout } from "./components/layout/MainLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Registro from "./pages/Registro";
+import RecuperarContrasena from "./pages/RecuperarContrasena";
+import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import ChatIA from "./pages/ChatIA";
@@ -19,6 +21,8 @@ import Resenas from "./pages/Resenas";
 import HistorialBusquedas from "./pages/HistorialBusquedas";
 import HistorialResultados from "./pages/HistorialResultados";
 import Perfil from "./pages/Perfil";
+import PerfilDebug from "./pages/PerfilDebug";
+import PerfilSimplificadoV2 from "./pages/PerfilSimplificadoV2";
 import Configuracion from "./pages/Configuracion";
 import NotFound from "./pages/NotFound";
 import { OnboardingRedirect } from "./components/OnboardingRedirect";
@@ -35,6 +39,8 @@ const App = () => (
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Registro />} />
+          <Route path="/recuperar-contrasena" element={<RecuperarContrasena />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
 
           {/* TODAS las rutas sin OnboardingRedirect */}
