@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Mic, Sparkles, MapPin, ExternalLink, Plus, Minus, Navigation, Star, Clock, DollarSign } from "lucide-react";
+import { Send, Mic, Sparkles, MapPin, ExternalLink, Plus, Minus, Navigation, Star, Clock, DollarSign, Heart, Eye } from "lucide-react";
 import ChatMessage from "@/components/ChatMessage";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useFavorites } from "@/hooks/useFavorites";
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyBer6JXdqunENnx3lqiLAszzqqREO8nGY0";
 
@@ -76,6 +77,7 @@ interface ChatConversation {
 
 const ChatIA = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [inputMessage, setInputMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -92,6 +94,7 @@ const ChatIA = () => {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   // Cargar conversación desde historial
   useEffect(() => {
@@ -920,7 +923,7 @@ const ChatIA = () => {
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {restaurants.map((restaurant, index) => (
                     <Card
                       key={index}
@@ -930,7 +933,7 @@ const ChatIA = () => {
                         }`}
                       onClick={() => handleRestaurantClick(restaurant)}
                     >
-                      <div className="relative h-32 overflow-hidden rounded-t-lg">
+                      <div className="relative h-48 overflow-hidden rounded-t-lg">
                         <img
                           src={restaurant.image}
                           alt={restaurant.name}
@@ -946,28 +949,28 @@ const ChatIA = () => {
                         )}
                       </div>
 
-                      <CardContent className="restaurant-card p-4">
+                      <CardContent className="p-5">
                         {/* NOMBRE DEL RESTAURANTE DESTACADO */}
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-bold text-base text-gray-900 line-clamp-1">{restaurant.name}</h4>
+                        <div className="flex items-start justify-between mb-3">
+                          <h4 className="font-bold text-lg text-foreground line-clamp-1">{restaurant.name}</h4>
                           {restaurant.rating && (
-                            <Badge variant="default" className="bg-yellow-100 text-yellow-800 text-xs ml-2 flex-shrink-0">
+                            <Badge variant="default" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 text-sm ml-2 flex-shrink-0">
                               ⭐ {restaurant.rating.toFixed(1)}
                             </Badge>
                           )}
                         </div>
 
                         {restaurant.type && (
-                          <Badge variant="secondary" className="mb-2 text-xs">
+                          <Badge variant="secondary" className="mb-3 text-sm">
                             {restaurant.type}
                           </Badge>
                         )}
 
-                        <div className="space-y-1.5 text-xs">
+                        <div className="space-y-2 text-sm">
                           {restaurant.address && (
-                            <div className="flex items-start gap-1.5 text-muted-foreground">
-                              <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                              <span className="line-clamp-2 text-xs">{restaurant.address}</span>
+                            <div className="flex items-start gap-2 text-muted-foreground">
+                              <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                              <span className="line-clamp-2 text-sm">{restaurant.address}</span>
                             </div>
                           )}
 
@@ -979,31 +982,59 @@ const ChatIA = () => {
                             )}
 
                             {restaurant.userRatingsTotal && (
-                              <span className="text-muted-foreground text-xs">
+                              <span className="text-muted-foreground text-sm">
                                 ({restaurant.userRatingsTotal} reseñas)
                               </span>
                             )}
                           </div>
 
                           {restaurant.description && (
-                            <p className="text-muted-foreground text-xs line-clamp-2">
+                            <p className="text-muted-foreground text-sm line-clamp-2">
                               {restaurant.description}
                             </p>
                           )}
 
+                          {/* Botones de acción */}
+                          <div className="flex gap-3 mt-4 pt-3 border-t border-border">
+                            <Button
+                              size="default"
+                              variant={isFavorite(restaurant.placeId || '') ? "default" : "outline"}
+                              className="flex-1 h-10 text-sm gap-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(restaurant.placeId || '');
+                              }}
+                            >
+                              <Heart className={`h-4 w-4 ${isFavorite(restaurant.placeId || '') ? 'fill-current' : ''}`} />
+                              {isFavorite(restaurant.placeId || '') ? 'Guardado' : 'Guardar'}
+                            </Button>
+                            <Button
+                              size="default"
+                              variant="default"
+                              className="flex-1 h-10 text-sm gap-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/restaurantes/${restaurant.placeId}`);
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                              Ver detalle
+                            </Button>
+                          </div>
+
                           {(restaurant.website || restaurant.phone) && (
-                            <div className="flex gap-1.5 mt-2">
+                            <div className="flex gap-2 mt-2">
                               {restaurant.website && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="flex-1 h-7 text-xs"
+                                  className="flex-1 h-9 text-sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     window.open(restaurant.website, '_blank');
                                   }}
                                 >
-                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                                   Web
                                 </Button>
                               )}
@@ -1011,7 +1042,7 @@ const ChatIA = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="flex-1 h-7 text-xs"
+                                  className="flex-1 h-9 text-sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     window.open(`tel:${restaurant.phone}`, '_blank');
