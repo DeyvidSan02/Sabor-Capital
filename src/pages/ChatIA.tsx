@@ -10,8 +10,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { getPhotoUrl } from "@/hooks/useRestaurants";
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyBer6JXdqunENnx3lqiLAszzqqREO8nGY0";
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const mapContainerStyle = {
   width: '100%',
@@ -78,7 +80,7 @@ interface ChatConversation {
 const ChatIA = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [inputMessage, setInputMessage] = useState("");
+  const [inputMessage, setInputMessage] = useState(location.state?.initialPrompt || "");
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -92,9 +94,54 @@ const ChatIA = () => {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const RESTAURANTS_PER_PAGE = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { data: userProfile } = useUserProfile();
+
+  // Guardar estado del chat en sessionStorage para preservarlo al navegar a detalles
+  useEffect(() => {
+    sessionStorage.setItem('chatIA_state', JSON.stringify({
+      messages,
+      restaurants,
+      currentConversationId
+    }));
+  }, [messages, restaurants, currentConversationId]);
+
+  // Restaurar estado del chat si existe (solo al montar el componente)
+  useEffect(() => {
+    const savedState = sessionStorage.getItem('chatIA_state');
+    if (savedState && !location.state?.loadConversation) {
+      try {
+        const state = JSON.parse(savedState);
+        if (state.messages && state.messages.length > 1) { // Solo restaurar si hay más que el mensaje inicial
+          setMessages(state.messages);
+          setRestaurants(state.restaurants || []);
+          setCurrentConversationId(state.currentConversationId);
+          console.log('✅ Estado del chat restaurado:', state.messages.length, 'mensajes');
+        }
+      } catch (error) {
+        console.error('Error restaurando estado del chat:', error);
+      }
+    }
+    
+    // Limpiar el flag de loadConversation después de usarlo
+    if (location.state?.loadConversation) {
+      window.history.replaceState({}, document.title);
+    }
+  }, []); // Solo ejecutar una vez al montar
+
+  // Enviar prompt inicial si existe
+  useEffect(() => {
+    if (location.state?.initialPrompt && inputMessage) {
+      // Pequeño delay para asegurar que el componente esté montado
+      setTimeout(() => {
+        handleSend();
+      }, 100);
+    }
+  }, []);
 
   // Cargar conversación desde historial
   useEffect(() => {
@@ -539,7 +586,7 @@ const ChatIA = () => {
     return restaurants;
   };
 
-  const handleSendMessage = async () => {
+  const handleSend = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
     const userMessage: Message = {
@@ -552,23 +599,56 @@ const ChatIA = () => {
     setInputMessage("");
     setIsLoading(true);
 
-    try {
-      const response = await fetch(
-        `https://ozladdazcubyvmgdpyop.supabase.co/functions/v1/chat`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemPrompt: systemPrompt,
-            messages: [...messages, userMessage].map(m => ({
-              role: m.role,
-              content: m.content
-            }))
-          })
+      try {
+        // Build user preferences context
+        let preferencesContext = '';
+        if (userProfile?.tipo_comida?.length > 0 || userProfile?.presupuesto || userProfile?.ubicacion) {
+          preferencesContext = `\n\n**PREFERENCIAS DEL USUARIO:**
+${userProfile.tipo_comida?.length > 0 ? `- Tipos de comida favoritos: ${userProfile.tipo_comida.join(', ')}` : ''}
+${userProfile.presupuesto ? `- Presupuesto preferido: ${userProfile.presupuesto}` : ''}
+${userProfile.ubicacion ? `- Ubicación preferida: ${userProfile.ubicacion}` : ''}`;
         }
-      );
+
+        const systemPrompt = `Eres Sabor Capital, un asistente experto en restaurantes de Bogotá, Colombia. 
+
+Tu misión es ayudar a los usuarios a encontrar el lugar perfecto para comer en Bogotá.
+
+**INSTRUCCIONES IMPORTANTES:**
+- SIEMPRE menciona las **coordenadas exactas** de cada restaurante
+- Habla de forma amigable y entusiasta
+- Da recomendaciones específicas
+- Si te preguntan por un tipo de comida o zona, busca restaurantes relevantes
+- Menciona detalles como calificación, precio, dirección y tipo de cocina
+${preferencesContext}
+
+**DETECCIÓN DE CONSULTAS GENERALES:**
+Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas", "ayúdame a buscar" o no especifica qué tipo de comida quiere:
+1. Responde el saludo de forma amigable
+2. Pregúntale si quiere ver recomendaciones basadas en sus preferencias guardadas o si prefiere que le recomiendes algo general
+3. Ejemplo: "¡Hola! 👋 Veo que tienes preferencias guardadas. ¿Quieres que busque restaurantes basándome en tus gustos (${userProfile?.tipo_comida?.join(', ') || 'tus preferencias'}) o prefieres que te recomiende algo diferente?"
+`;
+
+        const response = await fetch(
+          `https://ozladdazcubyvmgdpyop.supabase.co/functions/v1/chat`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              systemPrompt: systemPrompt,
+              userPreferences: userProfile ? {
+                tipo_comida: userProfile.tipo_comida,
+                presupuesto: userProfile.presupuesto,
+                ubicacion: userProfile.ubicacion
+              } : undefined,
+              messages: [...messages, userMessage].map(m => ({
+                role: m.role,
+                content: m.content
+              }))
+            })
+          }
+        );
 
       if (!response.ok || !response.body) {
         throw new Error('Error al conectar con el asistente');
@@ -584,6 +664,7 @@ const ChatIA = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let receivedRestaurants: Restaurant[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -600,6 +681,56 @@ const ChatIA = () => {
 
             try {
               const parsed = JSON.parse(data);
+              console.log('📥 Parsed SSE data:', parsed);
+              
+              // Check if this is metadata
+              if (parsed.type === 'metadata' && parsed.restaurants) {
+                console.log('📦 Received metadata with', parsed.restaurants.length, 'restaurants');
+                console.log('📦 Full metadata:', parsed.restaurants);
+                
+                // Convert metadata to Restaurant objects
+                receivedRestaurants = parsed.restaurants.map((place: any) => {
+                  const convertPriceLevel = (priceLevel: string): string => {
+                    const priceLevelMap: { [key: string]: string } = {
+                      'PRICE_LEVEL_FREE': '$',
+                      'PRICE_LEVEL_INEXPENSIVE': '$',
+                      'PRICE_LEVEL_MODERATE': '$$',
+                      'PRICE_LEVEL_EXPENSIVE': '$$$',
+                      'PRICE_LEVEL_VERY_EXPENSIVE': '$$$$',
+                      'PRICE_LEVEL_UNSPECIFIED': '$$'
+                    };
+                    return priceLevelMap[priceLevel] || '$$';
+                  };
+
+                  return {
+                    placeId: place.place_id,
+                    name: place.name,
+                    lat: place.location.lat,
+                    lng: place.location.lng,
+                    rating: place.rating || 0,
+                    price: convertPriceLevel(place.price_level),
+                    type: place.types?.[0]?.replace(/_/g, ' ') || 'restaurant',
+                    address: place.formatted_address,
+                    phone: place.phone_number,
+                    website: place.website,
+                    openNow: place.open_now,
+                    openingHours: place.opening_hours,
+                    image: place.photos?.[0] ? getPhotoUrl(place.photos[0], 800) : restaurantImages[Math.floor(Math.random() * restaurantImages.length)],
+                    userRatingsTotal: place.user_ratings_total || 0,
+                    description: `${place.name} - ${place.rating || 0} ⭐ (${place.user_ratings_total || 0} reseñas)`
+                  };
+                });
+                
+                console.log('✅ Converted', receivedRestaurants.length, 'restaurants:', receivedRestaurants.map(r => r.name));
+                
+                // Set restaurants immediately
+                setRestaurants(receivedRestaurants);
+                setCurrentPage(1); // Reset to first page
+                console.log('✅ Set', receivedRestaurants.length, 'restaurants from metadata');
+                continue;
+              }
+
+              // Otherwise it's AI response text
               const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
 
               if (text) {
@@ -613,7 +744,8 @@ const ChatIA = () => {
                 });
               }
             } catch (e) {
-              console.error('Error parseando el SSE:', e); //Security Service Edge
+              console.error('Error parseando el SSE:', e);
+              console.error('Line that failed:', line);
             }
           }
         }
@@ -628,56 +760,11 @@ const ChatIA = () => {
           // Guardar conversación completa
           saveConversation(firstUserMessage, lastMessage);
 
-          // Procesar las secciones de la respuesta completa
-          const sections = processAssistantResponse(lastMessage.content);
-          console.log('🗺️ Mapa:', sections.mapSection);
-          console.log('🌟 Recomendaciones:', sections.recommendationsSection);
-          console.log('📝 Detalles:', sections.detailedResponse);
-
-          // Extraer restaurantes de la respuesta
-          /* console.log('🔍 Extrayendo restaurantes del contenido...'); */
-          const extracted = extractRestaurants(lastMessage.content);
-          /* console.log('📊 Restaurantes extraídos:', extracted); */
-
-          if (extracted.length > 0) {
-            /* console.log('✅ Estableciendo restaurantes en el estado'); */
-            setRestaurants(extracted);
-            if (map && extracted[0]) {
-              console.log('🗺️ Moviendo mapa a:', extracted[0].lat, extracted[0].lng);
-              map.panTo({ lat: extracted[0].lat, lng: extracted[0].lng });
-              map.setZoom(14);
-            }
-          } else {
-            /* console.log('❌ No se pudieron extraer restaurantes'); */
-            // Forzar algunos restaurantes de ejemplo para testing
-            const sampleRestaurants: Restaurant[] = [
-              {
-                name: "Andrés D.C.",
-                lat: 4.6932,
-                lng: -74.0337,
-                address: "Cra. 11a #93-52, Usaquén",
-                type: "Comida Colombiana",
-                price: "$$$",
-                rating: 4.3,
-                description: "Experiencia gastronómica única con música en vivo",
-                image: restaurantImages[0],
-                openingHours: "12:00 PM - 12:00 AM"
-              },
-              {
-                name: "Harry Sasson",
-                lat: 4.6482,
-                lng: -74.0632,
-                address: "Cra. 5 #69a-44, Chapinero",
-                type: "Fusión Internacional",
-                price: "$$$$",
-                rating: 4.7,
-                description: "Alta cocina con ingredientes colombianos",
-                image: restaurantImages[1],
-                openingHours: "6:00 PM - 11:00 PM"
-              }
-            ];
-            console.log('🔄 Usando restaurantes de ejemplo:', sampleRestaurants);
-            setRestaurants(sampleRestaurants);
+          // If we received restaurants from metadata, use those and center map
+          if (receivedRestaurants.length > 0 && map) {
+            console.log('🗺️ Centering map on first restaurant:', receivedRestaurants[0].name);
+            map.panTo({ lat: receivedRestaurants[0].lat, lng: receivedRestaurants[0].lng });
+            map.setZoom(14);
           }
         }
         return newMessages;
@@ -924,7 +1011,9 @@ const ChatIA = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {restaurants.map((restaurant, index) => (
+                  {restaurants
+                    .slice((currentPage - 1) * RESTAURANTS_PER_PAGE, currentPage * RESTAURANTS_PER_PAGE)
+                    .map((restaurant, index) => (
                     <Card
                       key={index}
                       className={`restaurant-card cursor-pointer transition-all hover:shadow-lg border-2 ${selectedRestaurant?.name === restaurant.name
@@ -1012,13 +1101,17 @@ const ChatIA = () => {
                               size="default"
                               variant="default"
                               className="flex-1 h-10 text-sm gap-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/restaurantes/${restaurant.placeId}`);
-                              }}
+                              asChild
                             >
-                              <Eye className="h-4 w-4" />
-                              Ver detalle
+                              <a
+                                href={`/restaurantes/${restaurant.placeId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Eye className="h-4 w-4" />
+                                Ver detalle
+                              </a>
                             </Button>
                           </div>
 
@@ -1058,6 +1151,36 @@ const ChatIA = () => {
                     </Card>
                   ))}
                 </div>
+
+                {/* Paginación */}
+                {restaurants.length > RESTAURANTS_PER_PAGE && (
+                  <div className="flex justify-center items-center gap-4 mt-6 pt-6 border-t border-border">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="gap-2"
+                    >
+                      ← Anterior
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        Página {currentPage} de {Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE)}
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        {restaurants.length} restaurantes
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.min(Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE), prev + 1))}
+                      disabled={currentPage === Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE)}
+                      className="gap-2"
+                    >
+                      Siguiente →
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1094,12 +1217,12 @@ const ChatIA = () => {
               placeholder="Escribe tu mensaje..."
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
               className="flex-1"
               disabled={isLoading}
             />
             <Button
-              onClick={handleSendMessage}
+              onClick={handleSend}
               disabled={isLoading || !inputMessage.trim()}
               size="icon"
               className="bg-primary hover:bg-primary/90"

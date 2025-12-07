@@ -258,10 +258,15 @@ export type Database = {
       restaurant_cache: {
         Row: {
           cached_at: string | null
+          cuisine: string | null
+          currency: string | null
+          description: string | null
           expires_at: string | null
           formatted_address: string | null
           id: string
           location: Json
+          max_price: number | null
+          min_price: number | null
           name: string
           neighborhood: string | null
           open_now: boolean | null
@@ -271,6 +276,7 @@ export type Database = {
           place_id: string
           price_level: string | null
           rating: number | null
+          reviews: Json | null
           search_query: string | null
           types: string[] | null
           user_ratings_total: number | null
@@ -278,10 +284,15 @@ export type Database = {
         }
         Insert: {
           cached_at?: string | null
+          cuisine?: string | null
+          currency?: string | null
+          description?: string | null
           expires_at?: string | null
           formatted_address?: string | null
           id?: string
           location: Json
+          max_price?: number | null
+          min_price?: number | null
           name: string
           neighborhood?: string | null
           open_now?: boolean | null
@@ -291,6 +302,7 @@ export type Database = {
           place_id: string
           price_level?: string | null
           rating?: number | null
+          reviews?: Json | null
           search_query?: string | null
           types?: string[] | null
           user_ratings_total?: number | null
@@ -298,10 +310,15 @@ export type Database = {
         }
         Update: {
           cached_at?: string | null
+          cuisine?: string | null
+          currency?: string | null
+          description?: string | null
           expires_at?: string | null
           formatted_address?: string | null
           id?: string
           location?: Json
+          max_price?: number | null
+          min_price?: number | null
           name?: string
           neighborhood?: string | null
           open_now?: boolean | null
@@ -311,6 +328,7 @@ export type Database = {
           place_id?: string
           price_level?: string | null
           rating?: number | null
+          reviews?: Json | null
           search_query?: string | null
           types?: string[] | null
           user_ratings_total?: number | null
