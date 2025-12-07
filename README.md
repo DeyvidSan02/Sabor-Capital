@@ -33,7 +33,7 @@ src/
 - **Frontend**: React + TypeScript + Vite
 - **UI**: Tailwind CSS + shadcn/ui
 - **Routing**: React Router
-- **Backend** (por configurar): Lovable Cloud (Supabase)
+- **Backend** (por configurar): Cloud (Supabase)
 - **APIs** (por configurar):
   - Google Places API
   - Gemini IA
@@ -57,7 +57,7 @@ npm run dev
 ✅ Componentes base reutilizables  
 
 ⏳ Pendiente: Implementación de UI basada en wireframes de Stitch  
-⏳ Pendiente: Integración con Lovable Cloud  
+⏳ Pendiente: Integración con Cloud  
 ⏳ Pendiente: Integración con Google Places API  
 ⏳ Pendiente: Integración con IA para recomendaciones  
 
