@@ -143,11 +143,6 @@ const Perfil = () => {
           setSelectedLocalidadId(userProfile.id_localidad);
         }
 
-        // Establecer localidad seleccionada para cargar barrios
-        if (baseProfile.id_localidad) {
-          setSelectedLocalidadId(baseProfile.id_localidad);
-        }
-
         // Obtener historial de búsquedas
         const { data: searchHistory, error: searchError } = await supabase
           .from('historial_busqueda')
