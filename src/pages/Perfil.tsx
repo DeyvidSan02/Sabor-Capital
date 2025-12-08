@@ -94,15 +94,22 @@ const Perfil = () => {
   const { data: barrios = [], isLoading: loadingBarrios } = useBarriosPorLocalidad(selectedLocalidadId);
 
   useEffect(() => {
+    /* console.log('🎯 Perfil - useEffect ejecutado', {
+      user: user?.email,
+      authLoading
+    }); */
+
     if (authLoading || !user) {
+      /* console.log('🎯 Perfil - Esperando autenticación...'); */
       return;
     }
 
     const fetchUserData = async () => {
       try {
+        /* console.log('🎯 Perfil - Iniciando fetchUserData'); */
         setLoading(true);
 
-        // SOLO OBTENER datos del usuario - NO CREAR PERFIL
+        // Obtener datos del usuario desde la tabla usuario con datos relacionales
         const { data: userProfile, error: userError } = await supabase
           .from("usuario")
           .select(`
@@ -111,36 +118,47 @@ const Perfil = () => {
             barrio:id_barrio(id_barrio, nombre)
           `)
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
 
-        if (userError) {
-          console.error('No se encontró perfil del usuario:', userError);
-          toast({
-            title: "Perfil no encontrado",
-            description: "Completa tu registro primero",
-            variant: "destructive",
-          });
-          navigate('/registro');
-          return;
+        if (userError) throw userError;
+
+        // Si no existe registro en usuario, crear uno básico
+        let baseProfile;
+        if (!userProfile) {
+          // Crear perfil inicial
+          const { data: newProfile, error: insertError } = await supabase
+            .from("usuario")
+            .insert({
+              id: user.id,
+              nombre: user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario",
+              email: user.email,
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+          baseProfile = newProfile;
+        } else {
+          baseProfile = userProfile;
         }
 
-        // El perfil existe, cargar datos
-        setUserData(userProfile);
+        /* console.log('🎯 Perfil - Perfil cargado:', baseProfile); */
+        setUserData(baseProfile);
 
-        const formValues = {
-          nombre: userProfile.nombre || "",
-          apellidos: userProfile.apellidos || "",
-          telefono: userProfile.telefono || "",
-          id_localidad: userProfile.id_localidad || "",
-          id_barrio: userProfile.id_barrio || "",
-          presupuesto: userProfile.presupuesto || "",
-          tipo_comida: userProfile.tipo_comida || [],
-        };
+        // Actualizar valores del formulario
+        form.reset({
+          nombre: baseProfile.nombre || "",
+          apellidos: baseProfile.apellidos || "",
+          telefono: baseProfile.telefono || "",
+          id_localidad: baseProfile.id_localidad || "",
+          id_barrio: baseProfile.id_barrio || "",
+          presupuesto: baseProfile.presupuesto || "",
+          tipo_comida: baseProfile.tipo_comida || [],
+        });
 
-        form.reset(formValues);
-
-        if (userProfile.id_localidad) {
-          setSelectedLocalidadId(userProfile.id_localidad);
+        // Establecer localidad seleccionada para cargar barrios
+        if (baseProfile.id_localidad) {
+          setSelectedLocalidadId(baseProfile.id_localidad);
         }
 
         // Obtener historial de búsquedas
@@ -165,14 +183,15 @@ const Perfil = () => {
 
         if (!reviewsError && reviews) {
           setResenas(reviews);
-
+          
+          // Cargar nombres de restaurantes para las reseñas
           const placeIds = reviews.map(r => r.place_id);
           if (placeIds.length > 0) {
             const { data: restaurants } = await supabase
               .from('restaurant_cache')
               .select('place_id, name, formatted_address')
               .in('place_id', placeIds);
-
+            
             const reviewsWithNames = reviews.map(review => {
               const restaurant = restaurants?.find(r => r.place_id === review.place_id);
               return {
@@ -195,14 +214,15 @@ const Perfil = () => {
 
         if (!favsError && favs) {
           setFavoritos(favs);
-
+          
+          // Cargar nombres de restaurantes para favoritos
           const favPlaceIds = favs.map(f => f.place_id);
           if (favPlaceIds.length > 0) {
             const { data: restaurants } = await supabase
               .from('restaurant_cache')
               .select('place_id, name, formatted_address')
               .in('place_id', favPlaceIds);
-
+            
             const favsWithNames = favs.map(fav => {
               const restaurant = restaurants?.find(r => r.place_id === fav.place_id);
               return {
@@ -215,8 +235,9 @@ const Perfil = () => {
           }
         }
 
+        /* console.log('🎯 Perfil - Datos cargados exitosamente'); */
       } catch (error) {
-        console.error('Error cargando datos del perfil:', error);
+        /* console.error('🎯 Perfil - Error fetching user data:', error); */
         toast({
           title: "Error",
           description: "No se pudieron cargar los datos del perfil",
@@ -228,7 +249,7 @@ const Perfil = () => {
     };
 
     fetchUserData();
-  }, [user, authLoading, navigate, form, toast]);
+  }, [user, authLoading, navigate, form]);
 
   const handleEditProfile = () => {
     setIsEditDialogOpen(true);
@@ -370,7 +391,7 @@ const Perfil = () => {
             <p className="text-primary font-medium mb-3">
               {userData.email || user?.email}
             </p>
-
+            
             {/* Badges rápidos */}
             <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
               <Badge variant="secondary" className="gap-1">
@@ -415,7 +436,7 @@ const Perfil = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
           {/* Columna izquierda - Completitud (más estrecha) */}
           <div className="lg:col-span-1">
-            <ProfileCompleteness
+            <ProfileCompleteness 
               userData={userData}
               onEditProfile={handleEditProfile}
             />
@@ -451,7 +472,7 @@ const Perfil = () => {
                   <User className="w-5 h-5" />
                   Mi Perfil
                 </h3>
-
+                
                 <div className="space-y-4">
                   {/* Tipo de comida */}
                   <div className="space-y-2">
@@ -520,114 +541,114 @@ const Perfil = () => {
                     <TabsTrigger value="favoritos">Favoritos</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="busquedas" className="mt-6">
-                    <div className="space-y-3">
-                      {busquedas.length > 0 ? (
-                        busquedas.map((busqueda) => (
-                          <div
-                            key={busqueda.id_busqueda}
-                            className="py-3 border-b border-border last:border-0 text-foreground hover:text-primary cursor-pointer transition-colors"
-                            onClick={() => navigate('/historial/busquedas')}
-                          >
-                            <div className="font-medium">{busqueda.query}</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {new Date(busqueda.fecha).toLocaleDateString('es-ES')}
-                            </div>
+                <TabsContent value="busquedas" className="mt-6">
+                  <div className="space-y-3">
+                    {busquedas.length > 0 ? (
+                      busquedas.map((busqueda) => (
+                        <div
+                          key={busqueda.id_busqueda}
+                          className="py-3 border-b border-border last:border-0 text-foreground hover:text-primary cursor-pointer transition-colors"
+                          onClick={() => navigate('/historial/busquedas')}
+                        >
+                          <div className="font-medium">{busqueda.query}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {new Date(busqueda.fecha).toLocaleDateString('es-ES')}
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-center text-muted-foreground py-6">
-                          No tienes búsquedas recientes
                         </div>
-                      )}
-                    </div>
-                  </TabsContent>
+                      ))
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        No tienes búsquedas recientes
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
 
-                  <TabsContent value="resenas" className="mt-6">
-                    <div className="space-y-3">
-                      {resenasConNombres.length > 0 ? (
-                        resenasConNombres.map((resena) => (
-                          <div
-                            key={resena.id_resena}
-                            className="py-3 px-4 border border-border rounded-lg hover:border-primary/50 cursor-pointer transition-all hover:shadow-sm"
-                            onClick={() => navigate(`/restaurante/${resena.place_id}`)}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-foreground truncate">
-                                  {resena.restaurant_name}
-                                </div>
-                                {resena.restaurant_address && (
-                                  <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                                    {resena.restaurant_address}
-                                  </div>
-                                )}
-                                {resena.comentario && (
-                                  <div className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                                    "{resena.comentario}"
-                                  </div>
-                                )}
-                                <div className="text-xs text-muted-foreground mt-2">
-                                  {new Date(resena.fecha_resena).toLocaleDateString('es-ES', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric'
-                                  })}
-                                </div>
+                <TabsContent value="resenas" className="mt-6">
+                  <div className="space-y-3">
+                    {resenasConNombres.length > 0 ? (
+                      resenasConNombres.map((resena) => (
+                        <div
+                          key={resena.id_resena}
+                          className="py-3 px-4 border border-border rounded-lg hover:border-primary/50 cursor-pointer transition-all hover:shadow-sm"
+                          onClick={() => navigate(`/restaurante/${resena.place_id}`)}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-foreground truncate">
+                                {resena.restaurant_name}
                               </div>
-                              <div className="flex items-center gap-1 text-sm font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-1 rounded flex-shrink-0">
-                                ⭐ {resena.calificacion}
+                              {resena.restaurant_address && (
+                                <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                                  {resena.restaurant_address}
+                                </div>
+                              )}
+                              {resena.comentario && (
+                                <div className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                  "{resena.comentario}"
+                                </div>
+                              )}
+                              <div className="text-xs text-muted-foreground mt-2">
+                                {new Date(resena.fecha_resena).toLocaleDateString('es-ES', { 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
                               </div>
                             </div>
+                            <div className="flex items-center gap-1 text-sm font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-1 rounded flex-shrink-0">
+                              ⭐ {resena.calificacion}
+                            </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-center text-muted-foreground py-6">
-                          No has dejado reseñas aún
                         </div>
-                      )}
-                    </div>
-                  </TabsContent>
+                      ))
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        No has dejado reseñas aún
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
 
-                  <TabsContent value="favoritos" className="mt-6">
-                    <div className="space-y-3">
-                      {favoritosConNombres.length > 0 ? (
-                        favoritosConNombres.map((favorito) => (
-                          <div
-                            key={favorito.id_favorito}
-                            className="py-3 px-4 border border-border rounded-lg hover:border-primary/50 cursor-pointer transition-all hover:shadow-sm"
-                            onClick={() => navigate(`/restaurante/${favorito.place_id}`)}
-                          >
-                            <div className="font-semibold text-foreground truncate">
-                              {favorito.restaurant_name}
-                            </div>
-                            {favorito.restaurant_address && (
-                              <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                                {favorito.restaurant_address}
-                              </div>
-                            )}
-                            <div className="text-xs text-muted-foreground mt-2">
-                              Agregado el {new Date(favorito.fecha_agregado).toLocaleDateString('es-ES', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
-                            </div>
+                <TabsContent value="favoritos" className="mt-6">
+                  <div className="space-y-3">
+                    {favoritosConNombres.length > 0 ? (
+                      favoritosConNombres.map((favorito) => (
+                        <div
+                          key={favorito.id_favorito}
+                          className="py-3 px-4 border border-border rounded-lg hover:border-primary/50 cursor-pointer transition-all hover:shadow-sm"
+                          onClick={() => navigate(`/restaurante/${favorito.place_id}`)}
+                        >
+                          <div className="font-semibold text-foreground truncate">
+                            {favorito.restaurant_name}
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-center text-muted-foreground py-6">
-                          No tienes favoritos guardados
+                          {favorito.restaurant_address && (
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {favorito.restaurant_address}
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-2">
+                            Agregado el {new Date(favorito.fecha_agregado).toLocaleDateString('es-ES', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        No tienes favoritos guardados
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
         </div>
       </div>
+    </div>
 
       {/* Diálogo de Edición */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -673,20 +694,7 @@ const Perfil = () => {
                   <FormItem>
                     <FormLabel>Teléfono</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="3001234567" 
-                        {...field}
-                        onKeyDown={(e) => {
-                          const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight'];
-                          if (allowedKeys.includes(e.key) || 
-                              (e.key >= '0' && e.key <= '9') ||
-                              (e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key))) {
-                            return;
-                          }
-                          e.preventDefault();
-                        }}
-                        maxLength={10}
-                      />
+                      <Input placeholder="+57 123 456 7890" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -744,8 +752,8 @@ const Perfil = () => {
                         value={field.value || ""}
                         onValueChange={field.onChange}
                         placeholder={
-                          !selectedLocalidadId
-                            ? "Primero selecciona una localidad"
+                          !selectedLocalidadId 
+                            ? "Primero selecciona una localidad" 
                             : "Selecciona tu barrio"
                         }
                         searchPlaceholder="Buscar barrio..."
@@ -771,10 +779,9 @@ const Perfil = () => {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="economico">Económico ($)</SelectItem>
+                        <SelectItem value="económico">Económico ($)</SelectItem>
                         <SelectItem value="moderado">Moderado ($$)</SelectItem>
                         <SelectItem value="alto">Alto ($$$)</SelectItem>
-                        <SelectItem value="premium">Premium ($$$$)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
