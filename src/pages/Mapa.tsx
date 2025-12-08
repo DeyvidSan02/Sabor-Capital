@@ -75,93 +75,6 @@ const userLocationIcon = {
   `)}`
 };
 
-// Mapeo de barrios oficiales a zonas comerciales en la BD
-const neighborhoodMapping: { [key: string]: string[] } = {
-  // Chapinero
-  'Chicó Lago': ['Parque 93', 'La Cabrera', 'Rincón del Chico'],
-  'Chicó Norte': ['Parque 93', 'La Cabrera', 'Rincón del Chico', 'Quinta Camacho'],
-  'Chicó Norte II': ['Parque 93', 'Quinta Camacho'],
-  'El Retiro': ['Parque 93', 'Rincón del Chico'],
-  'Chapinero': ['Chapinero', 'Chapinero Central'],
-  'Chapinero Norte': ['Chapinero', 'Chapinero Central', 'Quinta Camacho'],
-  'Chapinero Central': ['Chapinero Central', 'Chapinero'],
-  'Pardo Rubio': ['Chapinero'],
-  
-  // Usaquén
-  'Usaquén': ['Usaquén'],
-  'Santa Bárbara': ['Usaquén', 'Santa Bárbara'],
-  'Country Club': ['Usaquén'],
-  'Los Cedros': ['Usaquén'],
-  'San Patricio': ['Usaquén'],
-  
-  // La Candelaria
-  'La Candelaria': ['La Candelaria', 'La Concordia', 'Centro'],
-  
-  // Teusaquillo
-  'Teusaquillo': ['Teusaquillo'],
-  'Galerías': ['Teusaquillo'],
-  'Parque Simón Bolívar': ['Teusaquillo'],
-  
-  // Suba
-  'Suba': ['Suba'],
-  'Suba Centro': ['Suba'],
-  
-  // Engativá
-  'Engativá': ['Engativá'],
-  'Álamos': ['Engativá'],
-  
-  // Fontibón
-  'Fontibón': ['Fontibón'],
-  'Modelia': ['Fontibón'],
-  'Aeropuerto El Dorado': ['Fontibón'],
-  
-  // Kennedy
-  'Kennedy': ['Kennedy'],
-  'Kennedy Central': ['Kennedy'],
-  
-  // Puente Aranda
-  'Puente Aranda': ['Puente Aranda'],
-  
-  // Antonio Nariño
-  'Antonio Nariño': ['Antonio Nariño'],
-  
-  // Rafael Uribe Uribe
-  'Rafael Uribe Uribe': ['Rafael Uribe Uribe'],
-  
-  // Tunjuelito
-  'Tunjuelito': ['Tunjuelito'],
-  
-  // Bosa
-  'Bosa': ['Bosa'],
-  
-  // Ciudad Bolívar
-  'Ciudad Bolívar': ['Ciudad Bolívar'],
-  
-  // Usme
-  'Usme': ['Usme'],
-  
-  // San Cristóbal
-  'San Cristóbal': ['San Cristóbal'],
-  
-  // Santa Fe
-  'Santa Fe': ['Santa Fe', 'La Candelaria'],
-  
-  // Los Mártires
-  'Los Mártires': ['Los Mártires', 'Centro'],
-  
-  // Barrios Unidos
-  'Barrios Unidos': ['Barrios Unidos'],
-  
-  // Rosales
-  'Rosales': ['Rosales', 'Zona G'],
-  
-  // Zona G
-  'Zona G': ['Zona G', 'Rosales'],
-  
-  // Zona T
-  'Zona T': ['Zona T', 'Zona Rosa'],
-  'Zona Rosa': ['Zona Rosa', 'Zona T'],
-};
 
 export default function Mapa() {
   const navigate = useNavigate();
@@ -307,9 +220,7 @@ export default function Mapa() {
               onValueChange={(value) => {
                 const barrio = barrios.find(b => b.id_barrio === value);
                 if (barrio) {
-                  // Usar el mapeo para convertir barrio oficial a zonas comerciales
-                  const mappedNeighborhoods = neighborhoodMapping[barrio.nombre] || [barrio.nombre];
-                  setFilters(prev => ({ ...prev, neighborhood: mappedNeighborhoods }));
+                  setFilters(prev => ({ ...prev, neighborhood: [barrio.nombre] }));
                 }
               }}
               disabled={!selectedLocalidadId || loadingBarrios}
@@ -352,21 +263,19 @@ export default function Mapa() {
               </SelectContent>
             </Select>
             <Button 
-              variant="outline"
-              className="flex-1"
+              variant="outline" 
+              size="icon" 
+              className="relative"
               onClick={() => {
                 setFilters({ cuisine: [], priceLevel: [], neighborhood: [], minRating: undefined, openNow: undefined });
                 setSelectedLocalidadId(null);
-                setMapSearchQuery("");
               }}
-              disabled={activeFiltersCount === 0}
             >
-              <SlidersHorizontal className="h-4 w-4 mr-2" />
-              Limpiar filtros
+              <SlidersHorizontal className="h-4 w-4" />
               {activeFiltersCount > 0 && (
                 <Badge 
                   variant="destructive" 
-                  className="ml-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                  className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
                 >
                   {activeFiltersCount}
                 </Badge>
@@ -383,10 +292,9 @@ export default function Mapa() {
               <div className="text-center text-muted-foreground py-8">No se encontraron restaurantes</div>
             ) : (
               filteredRestaurants.map((restaurant) => {
-                // Priorizar fotos del caché, luego Google Places, luego imagen por defecto
                 const photoUrl = restaurant.photos && restaurant.photos.length > 0
                   ? getPhotoUrl(restaurant.photos[0], 400)
-                  : `https://source.unsplash.com/400x300/?restaurant,food,${encodeURIComponent(restaurant.cuisine || 'dining')}`;
+                  : 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400';
                 
                 return (
                   <div
@@ -396,14 +304,7 @@ export default function Mapa() {
                     }`}
                     onClick={() => handleRestaurantClick(restaurant)}
                   >
-                    <img 
-                      src={photoUrl} 
-                      alt={restaurant.name} 
-                      className="w-full h-32 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400';
-                      }}
-                    />
+                    <img src={photoUrl} alt={restaurant.name} className="w-full h-32 object-cover" />
                     <div className="p-3">
                       <h3 className="font-semibold text-foreground mb-1">{restaurant.name}</h3>
                       <div className="flex items-center justify-between text-sm">
@@ -481,13 +382,10 @@ export default function Mapa() {
                   <img 
                     src={selectedRestaurant.photos && selectedRestaurant.photos.length > 0
                       ? getPhotoUrl(selectedRestaurant.photos[0], 400)
-                      : `https://source.unsplash.com/400x300/?restaurant,food,${encodeURIComponent(selectedRestaurant.cuisine || 'dining')}`
+                      : 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400'
                     } 
                     alt={selectedRestaurant.name} 
-                    className="w-full h-24 object-cover rounded mb-2"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400';
-                    }}
+                    className="w-full h-24 object-cover rounded mb-2" 
                   />
                   <h3 className="font-semibold text-sm mb-1">{selectedRestaurant.name}</h3>
                   <p className="text-xs text-muted-foreground mb-2">

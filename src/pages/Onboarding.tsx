@@ -14,7 +14,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { LogoSaborCapital } from "@/components/LogoSaborCapital";
 import { useLocalidades, useBarriosPorLocalidad } from "@/hooks/useBarriosBogota";
-import { LocationCombobox } from "@/components/LocationCombobox";
 
 const onboardingSchema = z.object({
   telefono: z.string().min(10, "El teléfono debe tener al menos 10 dígitos"),
@@ -175,20 +174,21 @@ export default function Onboarding() {
 
                 <div className="space-y-2">
                   <Label htmlFor="id_localidad">Localidad</Label>
-                  <LocationCombobox
-                    options={localidades.map(loc => ({
-                      value: loc.id_localidad,
-                      label: `${loc.numero}. ${loc.nombre}`
-                    }))}
-                    value={watchLocalidad || ""}
-                    onValueChange={(value) => {
-                      setValue("id_localidad", value);
-                      setSelectedLocalidad(value);
-                      setValue("id_barrio", ""); // Reset barrio when localidad changes
-                    }}
-                    placeholder={loadingLocalidades ? "Cargando..." : "Selecciona tu localidad"}
+                  <Select 
+                    onValueChange={(value) => setValue("id_localidad", value)}
                     disabled={loadingLocalidades}
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingLocalidades ? "Cargando..." : "Selecciona tu localidad"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {localidades.map((localidad) => (
+                        <SelectItem key={localidad.id_localidad} value={localidad.id_localidad}>
+                          {localidad.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {errors.id_localidad && (
                     <p className="text-sm text-destructive">{errors.id_localidad.message}</p>
                   )}
@@ -196,22 +196,27 @@ export default function Onboarding() {
 
                 <div className="space-y-2">
                   <Label htmlFor="id_barrio">Barrio</Label>
-                  <LocationCombobox
-                    options={barrios.map(barrio => ({
-                      value: barrio.id_barrio,
-                      label: barrio.nombre
-                    }))}
-                    value={watch("id_barrio") || ""}
+                  <Select 
                     onValueChange={(value) => setValue("id_barrio", value)}
-                    placeholder={
-                      !selectedLocalidad 
-                        ? "Primero selecciona una localidad" 
-                        : loadingBarrios 
-                          ? "Cargando..." 
-                          : "Selecciona tu barrio"
-                    }
                     disabled={!selectedLocalidad || loadingBarrios}
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        !selectedLocalidad 
+                          ? "Primero selecciona una localidad" 
+                          : loadingBarrios 
+                            ? "Cargando..." 
+                            : "Selecciona tu barrio"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {barrios.map((barrio) => (
+                        <SelectItem key={barrio.id_barrio} value={barrio.id_barrio}>
+                          {barrio.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {errors.id_barrio && (
                     <p className="text-sm text-destructive">{errors.id_barrio.message}</p>
                   )}
