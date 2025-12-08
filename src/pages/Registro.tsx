@@ -32,20 +32,16 @@ const Registro = () => {
     formState: { errors },
     setValue,
     watch,
-    trigger,
   } = useForm<RegistroFormData>({
     resolver: zodResolver(registroSchema),
     defaultValues: {
       tipo_comida: [],
       presupuesto: "",
-      id_localidad: "",
-      id_barrio: "",
     },
   });
 
   const presupuestoValue = watch("presupuesto");
   const watchLocalidadId = watch("id_localidad");
-  const watchBarrioId = watch("id_barrio");
 
   // Cargar localidades y barrios
   const { data: localidades = [], isLoading: loadingLocalidades } = useLocalidades();
@@ -57,12 +53,11 @@ const Registro = () => {
     }
   }, [user, navigate]);
   
-  // Sincronizar selectedLocalidadId con el valor del formulario
   useEffect(() => {
-    if (watchLocalidadId && watchLocalidadId !== selectedLocalidadId) {
+    if (watchLocalidadId) {
       setSelectedLocalidadId(watchLocalidadId);
     }
-  }, [watchLocalidadId, selectedLocalidadId]);
+  }, [watchLocalidadId]);
 
   const preferences = [
     "Italiana",
@@ -83,20 +78,6 @@ const Registro = () => {
       : [...selectedPreferences, preference];
     setSelectedPreferences(updated);
     setValue("tipo_comida", updated);
-    trigger("tipo_comida");
-  };
-
-  // Función para permitir solo números en el teléfono
-  const handlePhoneInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight'];
-    
-    if (allowedKeys.includes(e.key) || 
-        (e.key >= '0' && e.key <= '9') ||
-        (e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key))) {
-      return;
-    }
-    
-    e.preventDefault();
   };
 
   const onSubmit = async (data: RegistroFormData) => {
@@ -176,15 +157,12 @@ const Registro = () => {
               {/* Nombre y Apellidos */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nombre" className="flex items-center gap-1">
-                    Nombre <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="nombre">Nombre</Label>
                   <Input
                     id="nombre"
                     type="text"
                     placeholder="Juan"
                     {...register("nombre")}
-                    required
                   />
                   {errors.nombre && (
                     <p className="text-sm text-destructive">{errors.nombre.message}</p>
@@ -192,15 +170,12 @@ const Registro = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="apellidos" className="flex items-center gap-1">
-                    Apellidos <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="apellidos">Apellidos</Label>
                   <Input
                     id="apellidos"
                     type="text"
                     placeholder="Pérez García"
                     {...register("apellidos")}
-                    required
                   />
                   {errors.apellidos && (
                     <p className="text-sm text-destructive">{errors.apellidos.message}</p>
@@ -210,15 +185,12 @@ const Registro = () => {
 
               {/* Correo electrónico */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-1">
-                  Correo electrónico <span className="text-destructive">*</span>
-                </Label>
+                <Label htmlFor="email">Correo electrónico</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="tu@correo.com"
                   {...register("email")}
-                  required
                 />
                 {errors.email && (
                   <p className="text-sm text-destructive">{errors.email.message}</p>
@@ -227,88 +199,51 @@ const Registro = () => {
 
               {/* Teléfono */}
               <div className="space-y-2">
-                <Label htmlFor="telefono" className="flex items-center gap-1">
-                  Teléfono <span className="text-destructive">*</span>
-                </Label>
+                <Label htmlFor="telefono">Teléfono</Label>
                 <Input
                   id="telefono"
                   type="tel"
-                  placeholder="3001234567"
+                  placeholder="+52 55 1234 5678"
                   {...register("telefono")}
-                  onKeyDown={handlePhoneInput}
-                  maxLength={10}
-                  required
                 />
                 {errors.telefono && (
                   <p className="text-sm text-destructive">{errors.telefono.message}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Ingresa tu número de celular (10 dígitos)
-                </p>
               </div>
 
               {/* Localidad y Barrio */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="id_localidad" className="flex items-center gap-1">
-                    Localidad <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={watchLocalidadId || ""}
+                  <Label htmlFor="id_localidad">Localidad</Label>
+                  <LocationCombobox
+                    options={localidades.map(loc => ({
+                      value: loc.id_localidad,
+                      label: `${loc.numero}. ${loc.nombre}`
+                    }))}
+                    value={watch("id_localidad") || ""}
                     onValueChange={(value) => {
                       setValue("id_localidad", value);
                       setSelectedLocalidadId(value);
-                      setValue("id_barrio", "");
-                      trigger("id_localidad");
+                      setValue("id_barrio", ""); // Reset barrio when localidad changes
                     }}
+                    placeholder="Selecciona una localidad"
                     disabled={loadingLocalidades}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={
-                        loadingLocalidades 
-                          ? "Cargando localidades..." 
-                          : "Selecciona una localidad"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {localidades.map((loc) => (
-                        <SelectItem key={loc.id_localidad} value={loc.id_localidad}>
-                          {loc.numero}. {loc.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                   {errors.id_localidad && (
                     <p className="text-sm text-destructive">{errors.id_localidad.message}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="id_barrio" className="flex items-center gap-1">
-                    Barrio <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="id_barrio">Barrio</Label>
                   <LocationCombobox
                     options={barrios.map(barrio => ({
                       value: barrio.id_barrio,
                       label: barrio.nombre
                     }))}
-                    value={watchBarrioId || ""}
-                    onValueChange={(value) => {
-                      setValue("id_barrio", value);
-                      trigger("id_barrio");
-                    }}
-                    placeholder={
-                      !selectedLocalidadId 
-                        ? "Primero selecciona localidad" 
-                        : loadingBarrios
-                          ? "Cargando barrios..."
-                          : barrios.length === 0
-                            ? "No hay barrios para esta localidad"
-                            : "Selecciona un barrio"
-                    }
-                    searchPlaceholder="Buscar barrio..."
-                    emptyText="No se encontró el barrio"
+                    value={watch("id_barrio") || ""}
+                    onValueChange={(value) => setValue("id_barrio", value)}
+                    placeholder={selectedLocalidadId ? "Selecciona un barrio" : "Primero selecciona localidad"}
                     disabled={!selectedLocalidadId || loadingBarrios}
                   />
                   {errors.id_barrio && (
@@ -320,9 +255,7 @@ const Registro = () => {
               {/* Contraseñas */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="flex items-center gap-1">
-                    Contraseña <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="password">Contraseña</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -330,7 +263,6 @@ const Registro = () => {
                       placeholder="••••••••"
                       {...register("password")}
                       className="pr-10"
-                      required
                     />
                     <button
                       type="button"
@@ -346,9 +278,7 @@ const Registro = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="flex items-center gap-1">
-                    Confirmar <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="confirmPassword">Confirmar</Label>
                   <div className="relative">
                     <Input
                       id="confirmPassword"
@@ -356,7 +286,6 @@ const Registro = () => {
                       placeholder="••••••••"
                       {...register("confirmPassword")}
                       className="pr-10"
-                      required
                     />
                     <button
                       type="button"
@@ -374,17 +303,8 @@ const Registro = () => {
 
               {/* Presupuesto */}
               <div className="space-y-2">
-                <Label htmlFor="presupuesto" className="flex items-center gap-1">
-                  Presupuesto promedio <span className="text-destructive">*</span>
-                </Label>
-                <Select 
-                  value={presupuestoValue} 
-                  onValueChange={(value) => {
-                    setValue("presupuesto", value);
-                    trigger("presupuesto");
-                  }}
-                  required
-                >
+                <Label htmlFor="presupuesto">Presupuesto promedio por comida</Label>
+                <Select value={presupuestoValue} onValueChange={(value) => setValue("presupuesto", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona tu presupuesto" />
                   </SelectTrigger>
@@ -403,9 +323,7 @@ const Registro = () => {
               {/* Preferencias gastronómicas */}
               <div className="space-y-3 pt-2">
                 <div>
-                  <Label className="text-base flex items-center gap-1">
-                    Preferencias Gastronómicas <span className="text-destructive">*</span>
-                  </Label>
+                  <Label className="text-base">Preferencias Gastronómicas</Label>
                   <p className="text-sm text-muted-foreground mt-1">
                     Selecciona al menos una preferencia
                   </p>
@@ -429,9 +347,6 @@ const Registro = () => {
                 {errors.tipo_comida && (
                   <p className="text-sm text-destructive">{errors.tipo_comida.message}</p>
                 )}
-                <div className="text-xs text-muted-foreground">
-                  {selectedPreferences.length} preferencias seleccionadas
-                </div>
               </div>
 
               <div className="space-y-3 pt-4">
