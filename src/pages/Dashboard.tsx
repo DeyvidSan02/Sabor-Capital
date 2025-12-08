@@ -10,6 +10,7 @@ import { useRestaurants } from "@/hooks/useRestaurants";
 const Dashboard = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout>();
   
   // Fetch real restaurants data
   const { data: restaurants, isLoading: loadingRestaurants } = useRestaurants(5);
@@ -50,11 +51,52 @@ const Dashboard = () => {
 
   const handleBuscarConIA = () => {
     if (searchQuery.trim()) {
-      navigate("/chat-ia", { state: { query: searchQuery } });
+      navigate("/chat-ia", { 
+        state: { 
+          initialPrompt: searchQuery.trim(),
+          fromDashboard: true
+        } 
+      });
     } else {
       navigate("/chat-ia");
     }
   };
+
+  // Función para búsqueda con Enter
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleBuscarConIA();
+    }
+  };
+
+  // Efecto para búsqueda automática después de dejar de escribir (opcional)
+  // Comentar si no se desea esta funcionalidad
+  /*
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    if (searchQuery.trim().length > 2) {
+      const timeout = setTimeout(() => {
+        navigate("/chat-ia", { 
+          state: { 
+            initialPrompt: searchQuery.trim(),
+            fromDashboard: true
+          } 
+        });
+      }, 1500);
+
+      setSearchTimeout(timeout);
+    }
+
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchQuery]);
+  */
 
   return (
     <div className="min-h-full">
@@ -79,7 +121,7 @@ const Dashboard = () => {
                   placeholder="¿Qué tipo de comida estás buscando?"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleBuscarConIA()}
+                  onKeyDown={handleKeyDown}
                   className="pl-10 h-12 text-base"
                 />
               </div>
