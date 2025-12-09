@@ -12,12 +12,12 @@ export const useAuth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
-
+        
         // Si hay sesión pero no está marcado "recordarme", verificar
         if (session && !localStorage.getItem('rememberMe')) {
           // No hacer nada aquí, dejar que la sesión persista hasta cerrar navegador
         }
-
+        
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -268,7 +268,7 @@ export const useAuth = () => {
     try {
       // Limpiar preferencia de "recordarme"
       localStorage.removeItem('rememberMe');
-
+      
       const { error } = await supabase.auth.signOut();
       if (error) {
         toast.error(error.message);

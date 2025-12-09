@@ -1,21 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Send, Mic, Sparkles, MapPin, ExternalLink, 
-  Plus, Minus, Navigation, Star, DollarSign, 
-  Heart, Eye, ChevronLeft, ChevronRight 
-} from "lucide-react";
+import { Send, Mic, Sparkles, MapPin, ExternalLink, Plus, Minus, Navigation, Star, Clock, DollarSign, Heart, Eye } from "lucide-react";
 import ChatMessage from "@/components/ChatMessage";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useFavorites } from "@/hooks/useFavorites";
-import { useUserProfile } from "@/hooks/useUserProfile";
-import { getPhotoUrl } from "@/hooks/useRestaurants";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
@@ -75,7 +69,8 @@ interface Restaurant {
 
 const ChatIA = () => {
   const location = useLocation();
-  const [inputMessage, setInputMessage] = useState(location.state?.initialPrompt || "");
+  const navigate = useNavigate();
+  const [inputMessage, setInputMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -96,47 +91,6 @@ const ChatIA = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isFavorite, toggleFavorite } = useFavorites();
-  const { data: userProfile } = useUserProfile();
-
-  // Restaurar estado del chat si existe
-  useEffect(() => {
-    const savedState = sessionStorage.getItem('chatIA_state');
-    if (savedState && !location.state?.loadConversation) {
-      try {
-        const state = JSON.parse(savedState);
-        if (state.messages && state.messages.length > 1) {
-          setMessages(state.messages);
-          setRestaurants(state.restaurants || []);
-          setCurrentConversationId(state.currentConversationId);
-          setShowResultsPanel(state.restaurants?.length > 0);
-        }
-      } catch (error) {
-        console.error('Error restaurando estado del chat:', error);
-      }
-    }
-    
-    if (location.state?.loadConversation) {
-      window.history.replaceState({}, document.title);
-    }
-  }, []);
-
-  // Enviar prompt inicial si viene del dashboard
-  useEffect(() => {
-    if (location.state?.initialPrompt && inputMessage && !hasProcessedInitialPrompt) {
-      setTimeout(() => {
-        handleSend();
-        setHasProcessedInitialPrompt(true);
-        
-        if (location.state?.fromDashboard) {
-          toast({
-            title: "Búsqueda iniciada",
-            description: `Buscando restaurantes para: "${inputMessage}"`,
-            duration: 3000
-          });
-        }
-      }, 500);
-    }
-  }, [location.state]);
 
   // Cargar conversación desde historial
   useEffect(() => {
@@ -212,7 +166,7 @@ const ChatIA = () => {
 
       if (!conversationId) {
         const titulo = userMsg.content.substring(0, 100) + (userMsg.content.length > 100 ? '...' : '');
-        
+
         const { data: newConv, error: convError } = await supabase
           .from('chat_conversacion')
           .insert({
@@ -485,7 +439,7 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
 
             try {
               const parsed = JSON.parse(data);
-              
+
               if (parsed.type === 'metadata' && parsed.restaurants) {
                 receivedRestaurants = parsed.restaurants.map((place: any) => {
                   const convertPriceLevel = (priceLevel: string): string => {
@@ -518,7 +472,7 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                     description: `${place.name} - ${place.rating || 0} ⭐ (${place.user_ratings_total || 0} reseñas)`
                   };
                 });
-                
+
                 setRestaurants(receivedRestaurants);
                 setShowResultsPanel(true);
                 setCurrentPage(1);
@@ -548,7 +502,7 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
         const firstUserMessage = newMessages[newMessages.length - 2];
-        
+
         if (lastMessage.role === "assistant") {
           saveConversation(firstUserMessage, lastMessage);
 
@@ -753,7 +707,7 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                   <h3 className="font-semibold">🗺️ Ubicación de restaurantes</h3>
                 </div>
               </div>
-              
+
               <div className="relative h-[400px]">
                 <LoadScript
                   googleMapsApiKey={GOOGLE_MAPS_API_KEY}
@@ -856,139 +810,248 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                 {restaurants
                   .slice((currentPage - 1) * RESTAURANTS_PER_PAGE, currentPage * RESTAURANTS_PER_PAGE)
                   .map((restaurant, index) => (
-                  <Card
-                    key={index}
-                    className={`cursor-pointer transition-all hover:shadow-lg border ${selectedRestaurant?.name === restaurant.name
-                      ? 'border-primary shadow-lg'
-                      : 'border-border'
-                      }`}
-                    onClick={() => handleRestaurantClick(restaurant)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex gap-4">
-                        <div className="relative h-24 w-24 flex-shrink-0 rounded-lg overflow-hidden">
-                          <img
-                            src={restaurant.image}
-                            alt={restaurant.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="font-semibold text-foreground line-clamp-1">{restaurant.name}</h4>
-                            {restaurant.rating && (
-                              <Badge variant="default" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 text-xs">
-                                ⭐ {restaurant.rating.toFixed(1)}
-                              </Badge>
-                            )}
+                    <Card
+                      key={index}
+                      className={`cursor-pointer transition-all hover:shadow-lg border ${selectedRestaurant?.name === restaurant.name
+                        ? 'border-primary shadow-lg'
+                        : 'border-border'
+                        }`}
+                      onClick={() => handleRestaurantClick(restaurant)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex gap-4">
+                          <div className="relative h-24 w-24 flex-shrink-0 rounded-lg overflow-hidden">
+                            <img
+                              src={restaurant.image}
+                              alt={restaurant.name}
+                              className="w-full h-full object-cover"
+                            />
                           </div>
 
-                          {restaurant.type && (
-                            <Badge variant="secondary" className="mb-2 text-xs">
-                              {restaurant.type}
-                            </Badge>
-                          )}
-
-                          {restaurant.address && (
-                            <div className="flex items-start gap-2 text-xs text-muted-foreground mb-2">
-                              <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                              <span className="line-clamp-2">{restaurant.address}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between mb-2">
+                              <h4 className="font-semibold text-foreground line-clamp-1">{restaurant.name}</h4>
+                              {restaurant.rating && (
+                                <Badge variant="default" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 text-xs">
+                                  ⭐ {restaurant.rating.toFixed(1)}
+                                </Badge>
+                              )}
                             </div>
-                          )}
 
-                          <div className="flex items-center justify-between mt-3">
-                            <div className="flex gap-3">
-                              <Button
-                                size="sm"
-                                variant={isFavorite(restaurant.placeId || '') ? "default" : "outline"}
-                                className="h-8 text-xs gap-1.5"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleFavorite(restaurant.placeId || '');
-                                }}
-                              >
-                                <Heart className={`h-3 w-3 ${isFavorite(restaurant.placeId || '') ? 'fill-current' : ''}`} />
-                                Guardar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                className="h-8 text-xs gap-1.5"
-                                asChild
-                              >
-                                <a
-                                  href={`/restaurantes/${restaurant.placeId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {restaurants.map((restaurant, index) => (
+                                <Card
+                                  key={index}
+                                  className={`restaurant-card cursor-pointer transition-all hover:shadow-lg border-2 ${selectedRestaurant?.name === restaurant.name
+                                    ? 'border-primary shadow-xl'
+                                    : 'border-border hover:border-primary/50'
+                                    }`}
+                                  onClick={() => handleRestaurantClick(restaurant)}
                                 >
-                                  <Eye className="h-3 w-3" />
-                                  Detalle
-                                </a>
-                              </Button>
-                            </div>
+                                  <div className="relative h-48 overflow-hidden rounded-t-lg">
+                                    <img
+                                      src={restaurant.image}
+                                      alt={restaurant.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    {restaurant.openNow !== undefined && (
+                                      <Badge
+                                        variant={restaurant.openNow ? "default" : "destructive"}
+                                        className="absolute top-2 right-2 text-xs"
+                                      >
+                                        {restaurant.openNow ? '🟢 Abierto' : '🔴 Cerrado'}
+                                      </Badge>
+                                    )}
+                                  </div>
 
-                            {restaurant.price && (
-                              <div className="flex items-center gap-1">
-                                {getPriceLevel(restaurant.price)}
-                              </div>
-                            )}
+                                  <CardContent className="p-5">
+                                    {/* NOMBRE DEL RESTAURANTE DESTACADO */}
+                                    <div className="flex items-start justify-between mb-3">
+                                      <h4 className="font-bold text-lg text-foreground line-clamp-1">{restaurant.name}</h4>
+                                      {restaurant.rating && (
+                                        <Badge variant="default" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 text-sm ml-2 flex-shrink-0">
+                                          ⭐ {restaurant.rating.toFixed(1)}
+                                        </Badge>
+                                      )}
+
+                                      {restaurant.type && (
+                                        <Badge variant="secondary" className="mb-3 text-sm">
+                                          {restaurant.type}
+                                        </Badge>
+                                      )}
+
+                                      <div className="space-y-2 text-sm">
+                                        {restaurant.address && (
+                                          <div className="flex items-start gap-2 text-muted-foreground">
+                                            <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                            <span className="line-clamp-2 text-sm">{restaurant.address}</span>
+                                          </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between mt-3">
+                                          <div className="flex gap-3">
+                                            <Button
+                                              size="sm"
+                                              variant={isFavorite(restaurant.placeId || '') ? "default" : "outline"}
+                                              className="h-8 text-xs gap-1.5"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleFavorite(restaurant.placeId || '');
+                                              }}
+                                            >
+                                              <Heart className={`h-3 w-3 ${isFavorite(restaurant.placeId || '') ? 'fill-current' : ''}`} />
+                                              Guardar
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="default"
+                                              className="h-8 text-xs gap-1.5"
+                                              asChild
+                                            >
+                                              <a
+                                                href={`/restaurantes/${restaurant.placeId}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <Eye className="h-3 w-3" />
+                                                Detalle
+                                              </a>
+                                            </Button>
+                                          </div>
+
+                                          {restaurant.price && (
+                                            <div className="flex items-center gap-1">
+                                              {getPriceLevel(restaurant.price)}
+                                            </div>
+                                          )}
+
+                                          {restaurant.userRatingsTotal && (
+                                            <span className="text-muted-foreground text-sm">
+                                              ({restaurant.userRatingsTotal} reseñas)
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {restaurant.description && (
+                                          <p className="text-muted-foreground text-sm line-clamp-2">
+                                            {restaurant.description}
+                                          </p>
+                                        )}
+
+                                        {/* Botones de acción */}
+                                        <div className="flex gap-3 mt-4 pt-3 border-t border-border">
+                                          <Button
+                                            size="default"
+                                            variant={isFavorite(restaurant.placeId || '') ? "default" : "outline"}
+                                            className="flex-1 h-10 text-sm gap-2"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleFavorite(restaurant.placeId || '');
+                                            }}
+                                          >
+                                            <Heart className={`h-4 w-4 ${isFavorite(restaurant.placeId || '') ? 'fill-current' : ''}`} />
+                                            {isFavorite(restaurant.placeId || '') ? 'Guardado' : 'Guardar'}
+                                          </Button>
+                                          <Button
+                                            size="default"
+                                            variant="default"
+                                            className="flex-1 h-10 text-sm gap-2"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigate(`/restaurantes/${restaurant.placeId}`);
+                                            }}
+                                          >
+                                            <Eye className="h-4 w-4" />
+                                            Ver detalle
+                                          </Button>
+                                        </div>
+
+                                        {(restaurant.website || restaurant.phone) && (
+                                          <div className="flex gap-2 mt-2">
+                                            {restaurant.website && (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex-1 h-9 text-sm"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  window.open(restaurant.website, '_blank');
+                                                }}
+                                              >
+                                                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                                                Web
+                                              </Button>
+                                            )}
+                                            {restaurant.phone && (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex-1 h-9 text-sm"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  window.open(`tel:${restaurant.phone}`, '_blank');
+                                                }}
+                                              >
+                                                📞 Llamar
+                                              </Button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+
+                              {/* Paginación */}
+                              {restaurants.length > RESTAURANTS_PER_PAGE && (
+                                <div className="flex justify-center items-center gap-4 mt-4 pt-4 border-t border-border">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                    className="gap-2 text-xs"
+                                  >
+                                    <ChevronLeft className="h-3 w-3" />
+                                    Anterior
+                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">
+                                      Página {currentPage} de {Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE)}
+                                    </span>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE), prev + 1))}
+                                    disabled={currentPage === Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE)}
+                                    className="gap-2 text-xs"
+                                  >
+                                    Siguiente
+                                    <ChevronRight className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+      )}
 
-                {/* Paginación */}
-                {restaurants.length > RESTAURANTS_PER_PAGE && (
-                  <div className="flex justify-center items-center gap-4 mt-4 pt-4 border-t border-border">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="gap-2 text-xs"
-                    >
-                      <ChevronLeft className="h-3 w-3" />
-                      Anterior
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        Página {currentPage} de {Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE)}
-                      </span>
+                      {/* Botón para mostrar resultados en móvil */}
+                      {!showResultsPanel && restaurants.length > 0 && (
+                        <Button
+                          className="fixed bottom-4 right-4 z-50 md:hidden"
+                          size="icon"
+                          onClick={() => setShowResultsPanel(true)}
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </Button>
+                      )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE), prev + 1))}
-                      disabled={currentPage === Math.ceil(restaurants.length / RESTAURANTS_PER_PAGE)}
-                      className="gap-2 text-xs"
-                    >
-                      Siguiente
-                      <ChevronRight className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Botón para mostrar resultados en móvil */}
-      {!showResultsPanel && restaurants.length > 0 && (
-        <Button
-          className="fixed bottom-4 right-4 z-50 md:hidden"
-          size="icon"
-          onClick={() => setShowResultsPanel(true)}
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-      )}
-    </div>
-  );
+                  );
 };
 
-export default ChatIA;
+                export default ChatIA;

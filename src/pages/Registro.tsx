@@ -13,8 +13,6 @@ import { Eye, EyeOff } from "lucide-react";
 import { useTheme } from "next-themes";
 import loginBgDark from "@/assets/login-bg-dark.png";
 import loginBgLight from "@/assets/login-bg-light.png";
-import { useLocalidades, useBarriosPorLocalidad } from "@/hooks/useBarriosBogota";
-import { LocationCombobox } from "@/components/LocationCombobox";
 
 const Registro = () => {
   const { signUp, signInWithGoogle, user } = useAuth();

@@ -94,6 +94,12 @@ const Perfil = () => {
   const { data: barrios = [], isLoading: loadingBarrios } = useBarriosPorLocalidad(selectedLocalidadId);
 
   useEffect(() => {
+    /* console.log('🎯 Perfil - useEffect ejecutado', {
+      user: user?.email,
+      authLoading
+    }); */
+
+  useEffect(() => {
     if (authLoading || !user) {
       return;
     }
@@ -102,7 +108,7 @@ const Perfil = () => {
       try {
         setLoading(true);
 
-        // SOLO OBTENER datos del usuario - NO CREAR PERFIL
+        // Obtener datos del usuario desde la tabla usuario con datos relacionales
         const { data: userProfile, error: userError } = await supabase
           .from("usuario")
           .select(`
@@ -127,20 +133,20 @@ const Perfil = () => {
         // El perfil existe, cargar datos
         setUserData(userProfile);
 
-        const formValues = {
-          nombre: userProfile.nombre || "",
-          apellidos: userProfile.apellidos || "",
-          telefono: userProfile.telefono || "",
-          id_localidad: userProfile.id_localidad || "",
-          id_barrio: userProfile.id_barrio || "",
-          presupuesto: userProfile.presupuesto || "",
-          tipo_comida: userProfile.tipo_comida || [],
-        };
+        // Actualizar valores del formulario
+        form.reset({
+          nombre: baseProfile.nombre || "",
+          apellidos: baseProfile.apellidos || "",
+          telefono: baseProfile.telefono || "",
+          id_localidad: baseProfile.id_localidad || "",
+          id_barrio: baseProfile.id_barrio || "",
+          presupuesto: baseProfile.presupuesto || "",
+          tipo_comida: baseProfile.tipo_comida || [],
+        });
 
-        form.reset(formValues);
-
-        if (userProfile.id_localidad) {
-          setSelectedLocalidadId(userProfile.id_localidad);
+        // Establecer localidad seleccionada para cargar barrios
+        if (baseProfile.id_localidad) {
+          setSelectedLocalidadId(baseProfile.id_localidad);
         }
 
         // Obtener historial de búsquedas
@@ -441,16 +447,17 @@ const Perfil = () => {
           />
         </div>
 
-        {/* Sección combinada: Preferencias + Historial */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Preferencias Gastronómicas - Columna lateral */}
-          <div className="lg:col-span-1">
-            <Card className="h-full">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Mi Perfil
-                </h3>
+              {/* Ubicación */}
+              <div className="space-y-2">
+                <Label htmlFor="ubicacion" className="text-foreground font-medium">
+                  Ubicación
+                </Label>
+                <div className="text-sm text-muted-foreground">
+                  {userData.localidad?.nombre && userData.barrio?.nombre
+                    ? `${userData.barrio.nombre}, ${userData.localidad.nombre}`
+                    : 'No especificado'}
+                </div>
+              </div>
 
                 <div className="space-y-4">
                   {/* Tipo de comida */}
@@ -701,7 +708,11 @@ const Perfil = () => {
                   <FormItem>
                     <FormLabel>Localidad</FormLabel>
                     <FormControl>
-                      <Select
+                      <LocationCombobox
+                        options={localidades.map(l => ({
+                          value: l.id_localidad,
+                          label: `${l.numero}. ${l.nombre}`
+                        }))}
                         value={field.value || ""}
                         onValueChange={(value) => {
                           field.onChange(value);
@@ -709,19 +720,11 @@ const Perfil = () => {
                           // Limpiar barrio cuando se cambia localidad
                           form.setValue('id_barrio', '');
                         }}
+                        placeholder="Selecciona tu localidad"
+                        searchPlaceholder="Buscar localidad..."
+                        emptyText="No se encontró la localidad"
                         disabled={loadingLocalidades}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona tu localidad" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {localidades.map((l) => (
-                            <SelectItem key={l.id_localidad} value={l.id_localidad}>
-                              {l.numero}. {l.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -744,8 +747,8 @@ const Perfil = () => {
                         value={field.value || ""}
                         onValueChange={field.onChange}
                         placeholder={
-                          !selectedLocalidadId
-                            ? "Primero selecciona una localidad"
+                          !selectedLocalidadId 
+                            ? "Primero selecciona una localidad" 
                             : "Selecciona tu barrio"
                         }
                         searchPlaceholder="Buscar barrio..."

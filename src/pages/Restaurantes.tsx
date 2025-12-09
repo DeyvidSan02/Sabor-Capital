@@ -1,11 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, ChevronDown, Loader2, X } from "lucide-react";
+import { Sparkles, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RestauranteCard } from "@/components/RestauranteCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { QuickRecommendationModal } from "@/components/QuickRecommendationModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,104 +12,25 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useInfiniteRestaurants, formatPriceLevel, RestaurantFilters } from "@/hooks/useRestaurants";
-import { useNeighborhoods, useCuisines, usePriceLevels } from "@/hooks/useNeighborhoods";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { useRestaurants, getPhotoUrl, formatPriceLevel } from "@/hooks/useRestaurants";
 
 const Restaurantes = () => {
   const navigate = useNavigate();
-  const [showRecommendationModal, setShowRecommendationModal] = useState(false);
-  const [filters, setFilters] = useState<RestaurantFilters>({
-    cuisine: [],
-    priceLevel: [],
-    neighborhood: [],
-    minRating: undefined,
-    openNow: undefined,
-  });
-
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-  
-  const { 
-    data, 
-    isLoading, 
-    error, 
-    fetchNextPage, 
-    hasNextPage, 
-    isFetchingNextPage 
-  } = useInfiniteRestaurants(filters, 12);
-
-  // Obtener opciones dinámicas de filtros
-  const { data: neighborhoods = [] } = useNeighborhoods();
-  const { data: cuisines = [] } = useCuisines();
-  const { data: priceLevels = [] } = usePriceLevels();
-
-  // Flatten all pages into a single array
-  const allRestaurants = useMemo(() => {
-    return data?.pages.flatMap(page => page.data) || [];
-  }, [data]);
-
-  const totalCount = data?.pages[0]?.totalCount || 0;
-
-  // Intersection Observer para scroll infinito
-  useEffect(() => {
-    if (!loadMoreRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    observer.observe(loadMoreRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const { data: restaurantes, isLoading, error } = useRestaurants(20);
 
   const handleRestauranteClick = (placeId: string) => {
     navigate(`/restaurantes/${placeId}`);
   };
-
-  const toggleFilter = (filterType: keyof RestaurantFilters, value: any) => {
-    setFilters(prev => {
-      if (filterType === 'minRating') {
-        return { ...prev, minRating: prev.minRating === value ? undefined : value };
-      }
-      if (filterType === 'openNow') {
-        return { ...prev, openNow: prev.openNow === value ? undefined : value };
-      }
-      
-      const currentArray = (prev[filterType] as any[]) || [];
-      const newArray = currentArray.includes(value)
-        ? currentArray.filter(v => v !== value)
-        : [...currentArray, value];
-      
-      return { ...prev, [filterType]: newArray };
-    });
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      cuisine: [],
-      priceLevel: [],
-      neighborhood: [],
-      minRating: undefined,
-      openNow: undefined,
-    });
-  };
-
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (filters.cuisine?.length) count += filters.cuisine.length;
-    if (filters.priceLevel?.length) count += filters.priceLevel.length;
-    if (filters.neighborhood?.length) count += filters.neighborhood.length;
-    if (filters.minRating) count += 1;
-    if (filters.openNow) count += 1;
-    return count;
-  }, [filters]);
 
   return (
     <div className="min-h-full p-6 bg-background">
@@ -325,30 +244,37 @@ const Restaurantes = () => {
                 Error al cargar restaurantes. Por favor intenta de nuevo.
               </p>
             </div>
-          ) : !allRestaurants || allRestaurants.length === 0 ? (
+          ) : !restaurantes || restaurantes.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <p className="text-muted-foreground">
-                {filters.cuisine?.length || filters.priceLevel?.length || filters.neighborhood?.length || filters.minRating || filters.openNow
-                  ? 'No se encontraron restaurantes con los filtros seleccionados.'
-                  : 'No se encontraron restaurantes. Intenta realizar una búsqueda primero.'}
+                No se encontraron restaurantes. Intenta realizar una búsqueda primero.
               </p>
-              {(filters.cuisine?.length || filters.priceLevel?.length || filters.neighborhood?.length || filters.minRating || filters.openNow) && (
-                <Button variant="outline" onClick={clearFilters} className="mt-4">
-                  Limpiar filtros
-                </Button>
-              )}
             </div>
           ) : (
-            <>
-              {allRestaurants.map((restaurante) => (
+            restaurantes.map((restaurante) => {
+              const photoUrl = restaurante.photos && restaurante.photos.length > 0
+                ? getPhotoUrl(restaurante.photos[0], 400)
+                : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop";
+              
+              const tipo = restaurante.types && restaurante.types.length > 0
+                ? restaurante.types[0].replace(/_/g, " ")
+                : "Restaurante";
+
+              return (
                 <div
                   key={restaurante.id}
                   onClick={() => handleRestauranteClick(restaurante.place_id)}
                 >
-                  <RestauranteCard restaurant={restaurante} />
+                  <RestauranteCard
+                    nombre={restaurante.name}
+                    imagen={photoUrl}
+                    calificacion={restaurante.rating || 0}
+                    precio={formatPriceLevel(restaurante.price_level)}
+                    tipo={tipo}
+                  />
                 </div>
-              ))}
-            </>
+              );
+            })
           )}
         </div>
 
