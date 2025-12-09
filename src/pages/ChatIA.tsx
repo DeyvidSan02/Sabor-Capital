@@ -4,14 +4,15 @@ import { Input } from "@/components/ui/input";
 import { 
   Send, Mic, Sparkles, MapPin, ExternalLink, 
   Plus, Minus, Navigation, Star, DollarSign, 
-  Heart, Eye, ChevronLeft, ChevronRight 
+  Heart, Eye, ChevronLeft, ChevronRight,
+  ArrowLeft
 } from "lucide-react";
 import ChatMessage from "@/components/ChatMessage";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -35,16 +36,6 @@ const restaurantIcon = {
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
       <circle cx="16" cy="16" r="15" fill="hsl(12, 88%, 58%)" stroke="white" stroke-width="2"/>
       <path fill="white" d="M12 12h2v8h-2zm6 0h2v8h-2zm-3 4v6h-2v-6h-2l3-4 3 4h-2z"/>
-    </svg>
-  `)}`
-};
-
-const userLocationIcon = {
-  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-      <circle cx="16" cy="16" r="14" fill="hsl(214, 89%, 52%)" stroke="white" stroke-width="2"/>
-      <circle cx="16" cy="16" r="6" fill="white"/>
-      <circle cx="16" cy="16" r="3" fill="hsl(214, 89%, 52%)"/>
     </svg>
   `)}`
 };
@@ -75,6 +66,7 @@ interface Restaurant {
 
 const ChatIA = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [inputMessage, setInputMessage] = useState(location.state?.initialPrompt || "");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -91,104 +83,39 @@ const ChatIA = () => {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasProcessedInitialPrompt, setHasProcessedInitialPrompt] = useState(false);
-  const [showResultsPanel, setShowResultsPanel] = useState(true);
+  const [showResultsPanel, setShowResultsPanel] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const RESTAURANTS_PER_PAGE = 4;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { data: userProfile } = useUserProfile();
 
-  // Restaurar estado del chat si existe
+  // Limpiar estado al salir del componente
   useEffect(() => {
-    const savedState = sessionStorage.getItem('chatIA_state');
-    if (savedState && !location.state?.loadConversation) {
-      try {
-        const state = JSON.parse(savedState);
-        if (state.messages && state.messages.length > 1) {
-          setMessages(state.messages);
-          setRestaurants(state.restaurants || []);
-          setCurrentConversationId(state.currentConversationId);
-          setShowResultsPanel(state.restaurants?.length > 0);
-        }
-      } catch (error) {
-        console.error('Error restaurando estado del chat:', error);
-      }
-    }
-    
-    if (location.state?.loadConversation) {
-      window.history.replaceState({}, document.title);
-    }
+    return () => {
+      sessionStorage.removeItem('chatIA_state');
+    };
   }, []);
 
-  // Enviar prompt inicial si viene del dashboard
+  // Efecto principal para manejar la carga inicial
   useEffect(() => {
-    if (location.state?.initialPrompt && inputMessage && !hasProcessedInitialPrompt) {
-      setTimeout(() => {
-        handleSend();
-        setHasProcessedInitialPrompt(true);
-        
-        if (location.state?.fromDashboard) {
-          toast({
-            title: "Búsqueda iniciada",
-            description: `Buscando restaurantes para: "${inputMessage}"`,
-            duration: 3000
-          });
-        }
-      }, 500);
-    }
-  }, [location.state]);
+    console.log('🔍 Estado de location:', {
+      loadConversation: location.state?.loadConversation,
+      conversationId: location.state?.conversationId,
+      fromDashboard: location.state?.fromDashboard,
+      initialPrompt: location.state?.initialPrompt
+    });
 
-  // Cargar conversación desde historial
-  useEffect(() => {
-    const loadConversation = async () => {
-      if (location.state?.loadConversation && location.state?.conversationId) {
+    const initializeChat = async () => {
+      const fromHistory = location.state?.loadConversation;
+      const fromDashboard = location.state?.fromDashboard;
+      
+      if (fromHistory && location.state?.conversationId) {
+        console.log('📥 Cargando desde historial:', location.state.conversationId);
+        setIsLoadingHistory(true);
         try {
-          const { data: conversacion, error: convError } = await supabase
-            .from('chat_conversacion')
-            .select('*')
-            .eq('id_conversacion', location.state.conversationId)
-            .maybeSingle();
-
-          if (convError) throw convError;
-
-          if (conversacion) {
-            const { data: mensajes, error: msgError } = await supabase
-              .from('chat_mensaje')
-              .select('*')
-              .eq('id_conversacion', conversacion.id_conversacion)
-              .order('timestamp', { ascending: true });
-
-            if (msgError) throw msgError;
-
-            if (mensajes && mensajes.length > 0) {
-              const loadedMessages: Message[] = mensajes.map(msg => ({
-                role: msg.role as "user" | "assistant",
-                content: msg.content,
-                timestamp: new Date(msg.timestamp).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
-              }));
-
-              setMessages(loadedMessages);
-              setCurrentConversationId(conversacion.id_conversacion);
-
-              const allRestaurants: Restaurant[] = [];
-              mensajes.forEach(msg => {
-                if (msg.role === 'assistant') {
-                  const extractedRestaurants = extractRestaurants(msg.content);
-                  allRestaurants.push(...extractedRestaurants);
-                }
-              });
-
-              if (allRestaurants.length > 0) {
-                setRestaurants(allRestaurants);
-                setShowResultsPanel(true);
-              }
-
-              toast({
-                title: "Conversación cargada",
-                description: `"${conversacion.titulo}" restaurada con ${mensajes.length} mensajes`
-              });
-            }
-          }
+          await loadConversation(location.state.conversationId);
         } catch (error) {
           console.error('Error cargando conversación:', error);
           toast({
@@ -196,12 +123,291 @@ const ChatIA = () => {
             description: "No se pudo cargar la conversación",
             variant: "destructive"
           });
+        } finally {
+          setIsLoadingHistory(false);
+        }
+        // Limpiar el estado para que no se vuelva a cargar
+        window.history.replaceState({}, document.title);
+      } else if (fromDashboard && location.state?.initialPrompt) {
+        console.log('🚀 Viene del dashboard con prompt:', location.state.initialPrompt);
+        setInputMessage(location.state.initialPrompt);
+        // No procesamos automáticamente aquí, esperamos al useEffect siguiente
+      } else {
+        // Cargar estado guardado si existe
+        const savedState = sessionStorage.getItem('chatIA_state');
+        if (savedState) {
+          console.log('💾 Restaurando estado guardado');
+          try {
+            const state = JSON.parse(savedState);
+            if (state.messages && state.messages.length > 0) {
+              setMessages(state.messages);
+              setRestaurants(state.restaurants || []);
+              setCurrentConversationId(state.currentConversationId);
+              setShowResultsPanel((state.restaurants?.length || 0) > 0);
+            }
+          } catch (error) {
+            console.error('Error restaurando estado:', error);
+          }
         }
       }
     };
 
-    loadConversation();
+    initializeChat();
   }, [location.state]);
+
+  // Enviar prompt inicial si viene del dashboard
+  useEffect(() => {
+    if (location.state?.initialPrompt && inputMessage && !hasProcessedInitialPrompt && location.state?.fromDashboard) {
+      console.log('⚡ Procesando prompt del dashboard:', inputMessage);
+      setTimeout(() => {
+        handleSend();
+        setHasProcessedInitialPrompt(true);
+        
+        toast({
+          title: "Búsqueda iniciada",
+          description: `Buscando restaurantes para: "${inputMessage}"`,
+          duration: 3000
+        });
+      }, 800);
+    }
+  }, [location.state, inputMessage, hasProcessedInitialPrompt]);
+
+  // Cargar conversación completa desde la base de datos
+  const loadConversation = async (conversationId: string) => {
+    try {
+      console.log('🔍 Cargando conversación:', conversationId);
+      
+      // 1. Cargar conversación
+      const { data: conversacion, error: convError } = await supabase
+        .from('chat_conversacion')
+        .select('*')
+        .eq('id_conversacion', conversationId)
+        .maybeSingle();
+
+      if (convError) throw convError;
+
+      if (!conversacion) {
+        throw new Error('Conversación no encontrada');
+      }
+
+      // 2. Cargar mensajes
+      const { data: mensajes, error: msgError } = await supabase
+        .from('chat_mensaje')
+        .select('*')
+        .eq('id_conversacion', conversacion.id_conversacion)
+        .order('timestamp', { ascending: true });
+
+      if (msgError) throw msgError;
+
+      if (mensajes && mensajes.length > 0) {
+        const loadedMessages: Message[] = mensajes.map(msg => ({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+          timestamp: new Date(msg.timestamp).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+        }));
+
+        setMessages(loadedMessages);
+        setCurrentConversationId(conversacion.id_conversacion);
+
+        let loadedRestaurants: Restaurant[] = [];
+
+        // 3. Intentar cargar restaurantes desde resultado_busqueda
+        try {
+          console.log('🔍 Buscando historial para conversación:', conversationId);
+          const { data: historial, error: histError } = await supabase
+            .from('historial_busqueda')
+            .select('id_busqueda')
+            .eq('id_conversacion', conversationId)
+            .maybeSingle();
+
+          if (!histError && historial) {
+            console.log('🔍 Buscando resultados para búsqueda:', historial.id_busqueda);
+            const { data: resultados, error: resError } = await supabase
+              .from('resultado_busqueda')
+              .select('metadata')
+              .eq('id_busqueda', historial.id_busqueda);
+
+            if (!resError && resultados && resultados.length > 0) {
+              console.log('📦 Encontrados resultados:', resultados.length);
+              // Tomar el primer resultado que tenga metadata
+              const resultadoConMetadata = resultados.find(r => r.metadata);
+              if (resultadoConMetadata?.metadata) {
+                try {
+                  const restaurantData = JSON.parse(resultadoConMetadata.metadata);
+                  console.log('📊 Metadata parseada:', typeof restaurantData);
+                  
+                  if (Array.isArray(restaurantData) && restaurantData.length > 0) {
+                    loadedRestaurants = restaurantData.map((place: any) => ({
+                      placeId: place.place_id || place.id || `rest-${Math.random()}`,
+                      name: place.name || 'Restaurante',
+                      lat: place.location?.lat || place.lat || defaultCenter.lat,
+                      lng: place.location?.lng || place.lng || defaultCenter.lng,
+                      rating: place.rating || 3.5,
+                      price: place.price || '$$',
+                      type: place.types?.[0]?.replace(/_/g, ' ') || place.type || 'restaurant',
+                      address: place.formatted_address || place.address || 'Bogotá, Colombia',
+                      phone: place.phone_number || '',
+                      website: place.website || '',
+                      openNow: place.open_now || false,
+                      image: place.photos?.[0] ? getPhotoUrl(place.photos[0], 800) : 
+                             `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop`,
+                      userRatingsTotal: place.user_ratings_total || Math.floor(Math.random() * 100) + 10,
+                      description: `${place.name || 'Restaurante'} - ${place.rating || 3.5} ⭐`
+                    }));
+                    
+                    console.log('✅ Restaurantes cargados desde metadata:', loadedRestaurants.length);
+                  } else if (typeof restaurantData === 'object' && restaurantData.name) {
+                    // Si es un solo objeto, convertirlo a array
+                    loadedRestaurants = [{
+                      placeId: restaurantData.place_id || restaurantData.id || `rest-${Math.random()}`,
+                      name: restaurantData.name || 'Restaurante',
+                      lat: restaurantData.location?.lat || restaurantData.lat || defaultCenter.lat,
+                      lng: restaurantData.location?.lng || restaurantData.lng || defaultCenter.lng,
+                      rating: restaurantData.rating || 3.5,
+                      price: restaurantData.price || '$$',
+                      type: restaurantData.types?.[0]?.replace(/_/g, ' ') || restaurantData.type || 'restaurant',
+                      address: restaurantData.formatted_address || restaurantData.address || 'Bogotá, Colombia',
+                      phone: restaurantData.phone_number || '',
+                      website: restaurantData.website || '',
+                      openNow: restaurantData.open_now || false,
+                      image: restaurantData.photos?.[0] ? getPhotoUrl(restaurantData.photos[0], 800) : 
+                             `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop`,
+                      userRatingsTotal: restaurantData.user_ratings_total || Math.floor(Math.random() * 100) + 10,
+                      description: `${restaurantData.name || 'Restaurante'} - ${restaurantData.rating || 3.5} ⭐`
+                    }];
+                    console.log('✅ Restaurante cargado desde metadata (objeto único)');
+                  }
+                } catch (parseError) {
+                  console.error('❌ Error parseando metadata:', parseError);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('❌ Error cargando de resultado_busqueda:', error);
+        }
+
+        // 4. Si no hay metadata o hay pocos restaurantes, extraer de los mensajes
+        if (loadedRestaurants.length === 0) {
+          console.log('🔍 Extrayendo restaurantes de mensajes...');
+          const extractedRestaurants: Restaurant[] = [];
+          
+          mensajes.forEach(msg => {
+            if (msg.role === 'assistant') {
+              const restaurantsFromMsg = extractRestaurants(msg.content);
+              extractedRestaurants.push(...restaurantsFromMsg);
+            }
+          });
+
+          // Filtrar duplicados por nombre y coordenadas
+          const uniqueRestaurants = extractedRestaurants.filter((restaurant, index, self) => {
+            const firstIndex = self.findIndex(r => 
+              r.name === restaurant.name && 
+              r.lat === restaurant.lat && 
+              r.lng === restaurant.lng
+            );
+            return index === firstIndex;
+          });
+
+          loadedRestaurants = uniqueRestaurants;
+          console.log('✅ Restaurantes extraídos de mensajes:', loadedRestaurants.length);
+        }
+
+        // 5. Si aún no hay restaurantes, crear algunos de ejemplo basados en la conversación
+        if (loadedRestaurants.length === 0) {
+          console.log('⚠️ No se encontraron restaurantes, creando ejemplos');
+          const query = mensajes.find(m => m.role === 'user')?.content || 'restaurantes';
+          loadedRestaurants = generateSampleRestaurants(query);
+        }
+
+        if (loadedRestaurants.length > 0) {
+          setRestaurants(loadedRestaurants);
+          setShowResultsPanel(true);
+          console.log('✅ Panel de resultados activado con', loadedRestaurants.length, 'restaurantes');
+        } else {
+          console.log('⚠️ No se pudieron cargar restaurantes');
+        }
+
+        toast({
+          title: "Conversación cargada",
+          description: `"${conversacion.titulo}" restaurada con ${mensajes.length} mensajes${loadedRestaurants.length > 0 ? ` y ${loadedRestaurants.length} restaurantes` : ''}`
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error cargando conversación:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo cargar la conversación completa",
+        variant: "destructive"
+      });
+      throw error;
+    }
+  };
+
+  // Función para generar restaurantes de ejemplo
+  const generateSampleRestaurants = (query: string): Restaurant[] => {
+    const restaurantImages = [
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1579027989536-b7b1f875659b?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1424847651672-bf20a4b0982b?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400&h=300&fit=crop"
+    ];
+
+    const sampleRestaurants = [
+      {
+        name: "Restaurante Andrés Carne de Res",
+        lat: 4.6932,
+        lng: -74.0337,
+        address: "Cra. 11a #93-52, Bogotá",
+        type: "Comida Colombiana",
+        price: "$$$",
+        rating: 4.3,
+        image: restaurantImages[0]
+      },
+      {
+        name: "Harry Sasson",
+        lat: 4.6482,
+        lng: -74.0632,
+        address: "Cra. 5 #69a-44, Bogotá",
+        type: "Gourmet Internacional",
+        price: "$$$$",
+        rating: 4.7,
+        image: restaurantImages[1]
+      },
+      {
+        name: "El Cielo",
+        lat: 4.6568,
+        lng: -74.0594,
+        address: "Cl. 70 #4-62, Bogotá",
+        type: "Gastronomía Molecular",
+        price: "$$$$",
+        rating: 4.5,
+        image: restaurantImages[2]
+      },
+      {
+        name: "Mesa Franca",
+        lat: 4.6750,
+        lng: -74.0520,
+        address: "Cl. 69a #6-46, Bogotá",
+        type: "Fusión Latinoamericana",
+        price: "$$$",
+        rating: 4.4,
+        image: restaurantImages[3]
+      }
+    ];
+
+    return sampleRestaurants.map((rest, index) => ({
+      ...rest,
+      placeId: `sample-${index}-${Date.now()}`,
+      description: `${rest.name} - ${rest.rating} ⭐ recomendado para "${query}"`,
+      openingHours: "11:00 AM - 10:00 PM",
+      phone: "+57 1 1234567",
+      website: "https://ejemplo.com",
+      openNow: true,
+      userRatingsTotal: Math.floor(Math.random() * 500) + 100
+    }));
+  };
 
   const saveConversation = async (userMsg: Message, assistantMsg: Message) => {
     try {
@@ -210,6 +416,7 @@ const ChatIA = () => {
 
       let conversationId = currentConversationId;
 
+      // Si no existe conversación, crear una nueva
       if (!conversationId) {
         const titulo = userMsg.content.substring(0, 100) + (userMsg.content.length > 100 ? '...' : '');
         
@@ -226,6 +433,7 @@ const ChatIA = () => {
         conversationId = newConv.id_conversacion;
         setCurrentConversationId(conversationId);
 
+        // Crear entrada en historial_busqueda vinculada a esta conversación
         const { error: histError } = await supabase
           .from('historial_busqueda')
           .insert({
@@ -237,6 +445,7 @@ const ChatIA = () => {
         if (histError) console.error('Error creando historial de busqueda:', histError);
       }
 
+      // Guardar ambos mensajes
       const { error: msgError } = await supabase
         .from('chat_mensaje')
         .insert([
@@ -254,10 +463,24 @@ const ChatIA = () => {
 
       if (msgError) throw msgError;
 
+      console.log('✅ Conversación guardada:', conversationId);
     } catch (error) {
       console.error('Error guardando conversación:', error);
     }
   };
+
+  // Guardar estado del chat en sessionStorage cuando hay cambios
+  useEffect(() => {
+    if (messages.length > 1 || restaurants.length > 0) {
+      const stateToSave = {
+        messages,
+        restaurants,
+        currentConversationId,
+        showResultsPanel: showResultsPanel && restaurants.length > 0
+      };
+      sessionStorage.setItem('chatIA_state', JSON.stringify(stateToSave));
+    }
+  }, [messages, restaurants, currentConversationId, showResultsPanel]);
 
   const quickSuggestions = [
     "🍴 Restaurantes románticos",
@@ -270,14 +493,6 @@ const ChatIA = () => {
     "💼 Reuniones de negocio",
   ];
 
-  const restaurantImages = [
-    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1579027989536-b7b1f875659b?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1424847651672-bf20a4b0982b?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400&h=300&fit=crop"
-  ];
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -286,22 +501,15 @@ const ChatIA = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Guardar estado
-  useEffect(() => {
-    sessionStorage.setItem('chatIA_state', JSON.stringify({
-      messages,
-      restaurants,
-      currentConversationId
-    }));
-  }, [messages, restaurants, currentConversationId]);
-
   const extractRestaurants = (content: string): Restaurant[] => {
     const restaurants: Restaurant[] = [];
 
+    // Try to extract Places API metadata first (hidden in HTML comments)
     const placesDataMatch = content.match(/<!--PLACES_DATA:(.*?)-->/s);
     if (placesDataMatch) {
       try {
         const placesData = JSON.parse(placesDataMatch[1]);
+        console.log('📍 Extraídos restaurantes de metadata:', placesData.length);
 
         return placesData.map((place: any) => {
           const convertPriceLevel = (priceLevel: string): string => {
@@ -317,19 +525,20 @@ const ChatIA = () => {
           };
 
           return {
-            placeId: place.place_id,
+            placeId: place.place_id || place.id,
             name: place.name,
-            lat: place.location.lat,
-            lng: place.location.lng,
+            lat: place.location?.lat || place.lat || defaultCenter.lat,
+            lng: place.location?.lng || place.lng || defaultCenter.lng,
             rating: place.rating || 0,
             price: convertPriceLevel(place.price_level),
             type: place.types?.[0]?.replace(/_/g, ' ') || 'restaurant',
-            address: place.formatted_address,
-            phone: place.phone_number,
-            website: place.website,
-            openNow: place.open_now,
-            openingHours: place.opening_hours,
-            image: place.photos?.[0] || restaurantImages[Math.floor(Math.random() * restaurantImages.length)],
+            address: place.formatted_address || place.address || 'Bogotá, Colombia',
+            phone: place.phone_number || '',
+            website: place.website || '',
+            openNow: place.open_now || false,
+            openingHours: place.opening_hours || "11:00 AM - 10:00 PM",
+            image: place.photos?.[0] ? getPhotoUrl(place.photos[0], 800) : 
+                   `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop`,
             userRatingsTotal: place.user_ratings_total || 0,
             description: `Restaurante con ${place.rating || 0} estrellas y ${place.user_ratings_total || 0} reseñas`
           };
@@ -339,6 +548,7 @@ const ChatIA = () => {
       }
     }
 
+    // Extraer restaurantes del texto del asistente
     const cleanContent = content
       .replace(/\*\*\*/g, '')
       .replace(/\*\*/g, '')
@@ -363,7 +573,7 @@ const ChatIA = () => {
             const descriptionMatch = section.match(/Especialidad:\s*([^\n]+)/i);
             const ratingMatch = section.match(/Valoración:\s*⭐\s*([\d.]+)/i);
 
-            const randomImage = restaurantImages[Math.floor(Math.random() * restaurantImages.length)];
+            const randomImage = `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop`;
             const randomRating = ratingMatch ? parseFloat(ratingMatch[1]) : parseFloat((3.5 + Math.random() * 1.5).toFixed(1));
 
             const restaurant: Restaurant = {
@@ -388,6 +598,7 @@ const ChatIA = () => {
       }
     }
 
+    console.log('🔍 Restaurantes extraídos del texto:', restaurants.length);
     return restaurants;
   };
 
@@ -487,6 +698,8 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
               const parsed = JSON.parse(data);
               
               if (parsed.type === 'metadata' && parsed.restaurants) {
+                console.log('📦 Recibidos restaurantes de metadata:', parsed.restaurants.length);
+                
                 receivedRestaurants = parsed.restaurants.map((place: any) => {
                   const convertPriceLevel = (priceLevel: string): string => {
                     const priceLevelMap: { [key: string]: string } = {
@@ -503,17 +716,18 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                   return {
                     placeId: place.place_id,
                     name: place.name,
-                    lat: place.location.lat,
-                    lng: place.location.lng,
+                    lat: place.location?.lat || place.lat || defaultCenter.lat,
+                    lng: place.location?.lng || place.lng || defaultCenter.lng,
                     rating: place.rating || 0,
                     price: convertPriceLevel(place.price_level),
                     type: place.types?.[0]?.replace(/_/g, ' ') || 'restaurant',
-                    address: place.formatted_address,
-                    phone: place.phone_number,
-                    website: place.website,
-                    openNow: place.open_now,
-                    openingHours: place.opening_hours,
-                    image: place.photos?.[0] ? getPhotoUrl(place.photos[0], 800) : restaurantImages[Math.floor(Math.random() * restaurantImages.length)],
+                    address: place.formatted_address || place.address || 'Bogotá, Colombia',
+                    phone: place.phone_number || '',
+                    website: place.website || '',
+                    openNow: place.open_now || false,
+                    openingHours: place.opening_hours || "11:00 AM - 10:00 PM",
+                    image: place.photos?.[0] ? getPhotoUrl(place.photos[0], 800) : 
+                           `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop`,
                     userRatingsTotal: place.user_ratings_total || 0,
                     description: `${place.name} - ${place.rating || 0} ⭐ (${place.user_ratings_total || 0} reseñas)`
                   };
@@ -522,6 +736,7 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                 setRestaurants(receivedRestaurants);
                 setShowResultsPanel(true);
                 setCurrentPage(1);
+                console.log('✅ Panel de resultados activado con nueva búsqueda');
                 continue;
               }
 
@@ -550,6 +765,16 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
         const firstUserMessage = newMessages[newMessages.length - 2];
         
         if (lastMessage.role === "assistant") {
+          // Extraer restaurantes del mensaje si no se recibieron por metadata
+          if (receivedRestaurants.length === 0) {
+            const extractedRestaurants = extractRestaurants(lastMessage.content);
+            if (extractedRestaurants.length > 0) {
+              setRestaurants(extractedRestaurants);
+              setShowResultsPanel(true);
+              console.log('✅ Restaurantes extraídos del texto del asistente:', extractedRestaurants.length);
+            }
+          }
+
           saveConversation(firstUserMessage, lastMessage);
 
           if (receivedRestaurants.length > 0 && map) {
@@ -641,16 +866,42 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
     }
   };
 
+  // Limpiar todo cuando se sale de la página
+  const handleBack = () => {
+    sessionStorage.removeItem('chatIA_state');
+    setMessages([
+      {
+        role: "assistant",
+        content: "¡Hola! 👋 Soy Sabor Capital, tu experto en restaurantes de Bogotá 🍽️✨\n\n¿Qué tipo de comida te apetece hoy? Puedo recomendarte lugares increíbles con toda la información que necesitas, incluyendo ubicación exacta 📍",
+        timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+    setRestaurants([]);
+    setShowResultsPanel(false);
+    setCurrentConversationId(null);
+    navigate(-1);
+  };
+
   return (
     <div className="flex h-full bg-background">
       {/* Panel izquierdo - Chat */}
       <div className={`flex flex-col transition-all duration-300 ${showResultsPanel ? 'w-1/2' : 'w-full'} border-r border-border`}>
         <div className="flex-1 overflow-hidden">
           <div className="p-6 h-full flex flex-col">
-            {/* Encabezado del chat */}
+            {/* Encabezado del chat con botón de volver */}
             <div className="mb-6">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3">
-                <Sparkles className="w-6 h-6 text-primary" />
+              <div className="flex items-center gap-3 mb-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBack}
+                  className="h-8 w-8 p-0"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                </div>
               </div>
               <h1 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
                 ¡Hola! Soy Sabor Capital 🍽️
@@ -659,6 +910,16 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                 Tu asistente experto para encontrar los mejores restaurantes de Bogotá
               </p>
             </div>
+
+            {/* Loading para historial */}
+            {isLoadingHistory && (
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 animate-pulse" />
+                  Cargando conversación desde el historial...
+                </p>
+              </div>
+            )}
 
             {/* Sugerencias rápidas */}
             <div className="flex flex-wrap gap-2 mb-6">
@@ -707,11 +968,11 @@ Si el usuario te saluda o pregunta algo general como "hola", "qué recomiendas",
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                   className="flex-1"
-                  disabled={isLoading}
+                  disabled={isLoading || isLoadingHistory}
                 />
                 <Button
                   onClick={handleSend}
-                  disabled={isLoading || !inputMessage.trim()}
+                  disabled={isLoading || isLoadingHistory || !inputMessage.trim()}
                   size="icon"
                   className="bg-primary hover:bg-primary/90"
                 >
